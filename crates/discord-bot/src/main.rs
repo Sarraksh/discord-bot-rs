@@ -1,4 +1,8 @@
+mod stat;
+use stat::*;
+
 use std::env;
+use std::sync::Arc;
 
 use rand::Rng;
 use serenity::async_trait;
@@ -6,7 +10,9 @@ use serenity::model::channel::Message;
 use serenity::model::gateway::Ready;
 use serenity::prelude::*;
 
-struct Handler;
+struct Handler {
+    stat: Arc<Mutex<Stat>>,
+}
 
 #[async_trait]
 impl EventHandler for Handler {
@@ -15,7 +21,26 @@ impl EventHandler for Handler {
     // Event handlers are dispatched through a threadpool, and so multiple events can be
     // dispatched simultaneously.
     async fn message(&self, ctx: Context, msg: Message) {
+        let author_id = msg.author.id;
+        let channel_id = msg.channel_id;
+
+        let mut guard = self.stat.lock().await;
+        guard.message_streak.update_streak(channel_id, author_id);
+
+        // println!("=== STAT ===");
+        // if let Some(user_streak) = guard.message_streak.current_by_channel.get(&channel_id) {
+        //     let user = user_streak.user_id.to_user(&ctx.http).await.unwrap();
+        //     println!("current_by_channel : {:>3} | {:?}", user_streak.counter, user.global_name.unwrap());
+        // };
+        // if let Some(personal_record) = guard.message_streak.personal_record.get(&author_id) {
+        //     let channel = personal_record.channel_id.name(&ctx.http).await;
+        //     println!("personal_record    : {:>3} | {:?}", personal_record.counter, channel);
+        // };
+
         let author = msg.author.display_name();
+        // println!("--- message ---");
+        // println!("{author} in {:?} | {:>2?} | {:?}", channel_id.name(&ctx.http).await, msg.attachments.len(), msg.content);
+        // println!("====================");
 
         if author != "Sarraksh-test-bot" && rand::rng().random_range(0..10) == 0 {
             // Sending a message can fail, due to a network error, an authentication error, or lack
@@ -55,7 +80,9 @@ async fn main() {
     // Create a new instance of the Client, logging in as a bot. This will automatically prepend
     // your bot token with "Bot ", which is a requirement by Discord for bot users.
     let mut client = Client::builder(&token, intents)
-        .event_handler(Handler)
+        .event_handler(Handler {
+            stat: Arc::new(Mutex::new(Stat::default())),
+        })
         .await
         .expect("Err creating client");
 
