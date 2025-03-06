@@ -77,11 +77,13 @@ async fn main() {
         | GatewayIntents::DIRECT_MESSAGES
         | GatewayIntents::MESSAGE_CONTENT;
 
+    let mut stat = Stat::default();
+    stat.set_next_collection_time();
     // Create a new instance of the Client, logging in as a bot. This will automatically prepend
     // your bot token with "Bot ", which is a requirement by Discord for bot users.
     let mut client = Client::builder(&token, intents)
         .event_handler(Handler {
-            stat: Arc::new(Mutex::new(Stat::default())),
+            stat: Arc::new(Mutex::new(stat)),
         })
         .await
         .expect("Err creating client");
