@@ -25,6 +25,12 @@ impl EventHandler for Handler {
 
         let author_id = msg.author.id;
         let channel_id = msg.channel_id;
+        
+        let user_name = get_user_name(&author_id, &ctx.http).await;
+        println!("{:>2} | {user_name}", count_symbols(&user_name));
+
+        let chanel_name = get_channel_name(&channel_id, &ctx.http).await;
+        println!("{:>2} | {chanel_name}", count_symbols(&chanel_name));
 
         let flood_channel_id = serenity::all::ChannelId::from(1245807370341191812); // TODO - move to config
 
@@ -46,10 +52,11 @@ impl EventHandler for Handler {
                 println!("Error sending message: {why:?}");
             }
         };
+        stat_guard.message_streak = MessageStreak::default();
 
         stat_guard
             .message_streak
-            .update_streak(channel_id, author_id);
+            .update_streak(&msg);
 
         let now = chrono::Utc::now().naive_utc();
         let flood_channel_name = get_channel_name(&flood_channel_id, &ctx.http).await;

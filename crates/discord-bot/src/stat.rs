@@ -1,7 +1,7 @@
 use std::{collections::HashMap, vec};
 
 use chrono::Timelike;
-use serenity::all::{CacheHttp, ChannelId, GuildId, UserId};
+use serenity::all::{CacheHttp, ChannelId, GuildId, Message, UserId};
 
 #[derive(Debug, Default)]
 pub struct Stat {
@@ -55,13 +55,13 @@ impl MessageStreak {
         let mut max_symbols_in_user_name = 0;
         let mut max_symbols_in_series_channel_name = 0;
 
-        let max_symbols_in_messages = match messages_header.len() {
+        let max_symbols_in_messages = match count_symbols(&messages_header) {
             0..4 => 4,
-            _ => messages_header.len(),
+            _ => count_symbols(&messages_header),
         };
-        let max_symbols_in_attachments = match attachments_header.len() {
+        let max_symbols_in_attachments = match count_symbols(&attachments_header) {
             0..4 => 4,
-            _ => attachments_header.len(),
+            _ => count_symbols(&attachments_header),
         };
 
         for (user_id, personal_record) in self.personal_record.iter() {
@@ -73,24 +73,26 @@ impl MessageStreak {
         }
 
         for user_name in user_name_list {
-            if user_name.len() > max_symbols_in_user_name {
-                max_symbols_in_user_name = user_name.len();
+            println!("{:>2} | {user_name}", count_symbols(&user_name));
+            if count_symbols(&user_name) > max_symbols_in_user_name {
+                max_symbols_in_user_name = count_symbols(&user_name);
             }
         }
 
         for channel_name in channel_name_list {
-            if channel_name.len() > max_symbols_in_series_channel_name {
-                max_symbols_in_series_channel_name = channel_name.len();
+            if count_symbols(&channel_name) > max_symbols_in_series_channel_name {
+                max_symbols_in_series_channel_name = count_symbols(&channel_name);
             }
         }
         let max_symbols_in_series = max_symbols_in_series_channel_name + 4 + 4; // 4 - for " in ", 4 - for digits
 
+        // TODO - refactor
         if max_symbols_in_user_name == 0 {
             return None;
         }
 
-        rows.push(format!("{user_header:>max_symbols_in_user_name$} | {messages_header:<max_symbols_in_messages$} | {series_header:>max_symbols_in_series$} | {attachments_header:>max_symbols_in_attachments$}"));
-        rows.push(format!("{:>max_symbols_in_user_name$} | {:<max_symbols_in_messages$} | {:>max_symbols_in_series_channel_name$} | {:>max_symbols_in_attachments$}", "", "", "", ""));
+        rows.push(format!("{user_header:<max_symbols_in_user_name$} | {messages_header:<max_symbols_in_messages$} | {series_header:<max_symbols_in_series$} | {attachments_header:<max_symbols_in_attachments$}"));
+        rows.push(format!("{:<max_symbols_in_user_name$} | {:<max_symbols_in_messages$} | {:<max_symbols_in_series$} | {:<max_symbols_in_attachments$}", "", "", "", ""));
 
         for (user_id, personal_record) in self.personal_record.iter() {
             let user_name = get_user_name(user_id, &cache_http).await;
@@ -100,22 +102,26 @@ impl MessageStreak {
                 get_channel_name(&personal_record.channel_id, &cache_http).await;
             let attachments_count = self.attachments_count.get(user_id).unwrap_or(&0);
 
-            rows.push(format!("{user_name:>max_symbols_in_user_name$} | {messages_count:<max_symbols_in_messages$} | {series_record_counter:>4} in {series_record_channel_name:<max_symbols_in_series_channel_name$} | {attachments_count:>max_symbols_in_attachments$}"));
+            rows.push(format!("{user_name:<max_symbols_in_user_name$} | {messages_count:>max_symbols_in_messages$} | {series_record_counter:>4} in {series_record_channel_name:<max_symbols_in_series_channel_name$} | {attachments_count:>max_symbols_in_attachments$}"));
         }
 
         Some(rows.join("\n"))
     }
 
-    pub fn update_streak(&mut self, channel_id: ChannelId, user_id: UserId) {
+    pub fn update_streak(&mut self, msg: &Message) {
+        let user_id = msg.author.id;
+        let channel_id = msg.channel_id;
+
         self.messages_count
             .entry(user_id)
             .and_modify(|count| *count += 1)
             .or_insert(1);
 
+        let attachments = msg.attachments.len();
         self.attachments_count
             .entry(user_id)
-            .and_modify(|count| *count += 1)
-            .or_insert(1);
+            .and_modify(|count| *count += attachments)
+            .or_insert(attachments);
 
         let mut channel_streak = match self.current_by_channel.get(&channel_id) {
             Some(channel_streak) => channel_streak.clone(),
@@ -210,16 +216,22 @@ pub async fn get_channel_name(channel_id: &ChannelId, cache_http: impl CacheHttp
 }
 
 pub async fn get_user_name(user_id: &UserId, cache_http: impl CacheHttp) -> String {
-    let undefined_user = "Achilles son of Peleus".to_string();
+    let undefined_user = "Ахиллес сын Пелея".to_string();
 
     match user_id.to_user(&cache_http).await {
         Err(_) => undefined_user,
-        Ok(user) => match user.global_name {
-            Some(global) => global,
-            None => user
-                .nick_in(cache_http, GuildId::from(1245747866555908197)) // TODO - move to config
-                .await
-                .unwrap_or(undefined_user),
+        Ok(user) => match user
+            .nick_in(cache_http, GuildId::from(1245747866555908197)) // TODO - move to config
+            .await
+        {
+            Some(local) => local,
+            None => user.global_name.unwrap_or(undefined_user),
         },
     }
+}
+
+use unicode_segmentation::UnicodeSegmentation;
+
+pub fn count_symbols(s: &str) -> usize {
+    s.graphemes(true).count()
 }
