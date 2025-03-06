@@ -21,11 +21,46 @@ impl EventHandler for Handler {
     // Event handlers are dispatched through a threadpool, and so multiple events can be
     // dispatched simultaneously.
     async fn message(&self, ctx: Context, msg: Message) {
+        let mut stat_guard = self.stat.lock().await;
+
         let author_id = msg.author.id;
         let channel_id = msg.channel_id;
 
-        let mut guard = self.stat.lock().await;
-        guard.message_streak.update_streak(channel_id, author_id);
+        let flood_channel_id = serenity::all::ChannelId::from(1245807370341191812); // TODO - move to config
+
+        if let Some(table) = stat_guard.check_collection_time(&ctx.http).await {
+            println!("==== table is ======\n{:?}\n==============", table);
+
+            let table_message = [
+                format!(
+                    "Личный зачёт по флуду за недавно (ну типа того) {}",
+                    stat_guard.last_collection_duration
+                ),
+                "".to_string(),
+                "```".to_string(),
+                table,
+                "```".to_string(),
+            ]
+            .join("\n");
+            if let Err(why) = flood_channel_id.say(&ctx.http, table_message).await {
+                println!("Error sending message: {why:?}");
+            }
+        };
+
+        stat_guard
+            .message_streak
+            .update_streak(channel_id, author_id);
+
+        let now = chrono::Utc::now().naive_utc();
+        let flood_channel_name = get_channel_name(&flood_channel_id, &ctx.http).await;
+        let user_is = get_user_name(&author_id, &ctx.http).await;
+        println!("======================================");
+        println!("flood_channel is         {flood_channel_name:?}");
+        println!("user is                  {user_is:?}");
+        println!("collection_start time is {:?}", stat_guard.collection_start);
+        println!("time is                  {now:?}");
+        println!("next_update_time is      {:?}", stat_guard.collect_until);
+        println!("======================================");
 
         // println!("=== STAT ===");
         // if let Some(user_streak) = guard.message_streak.current_by_channel.get(&channel_id) {
@@ -78,7 +113,7 @@ async fn main() {
         | GatewayIntents::MESSAGE_CONTENT;
 
     let mut stat = Stat::default();
-    stat.set_next_collection_time();
+    stat.init_collection();
     // Create a new instance of the Client, logging in as a bot. This will automatically prepend
     // your bot token with "Bot ", which is a requirement by Discord for bot users.
     let mut client = Client::builder(&token, intents)
