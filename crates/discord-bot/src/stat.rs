@@ -1,7 +1,8 @@
-use std::{collections::HashMap, vec};
+use super::*;
 
-use chrono::Timelike;
-use serenity::all::{CacheHttp, ChannelId, GuildId, Message, UserId};
+use chrono::{Datelike, Timelike};
+use serenity::all::{CacheHttp, ChannelId, Message, UserId};
+use std::{collections::HashMap, vec};
 
 #[derive(Debug, Default)]
 pub struct Stat {
@@ -14,22 +15,17 @@ pub struct Stat {
 impl Stat {
     pub fn init_collection(&mut self) {
         self.collection_start = chrono::Utc::now().naive_utc();
+        println!("Now time is     : UTC {:?}", self.collection_start);
         self.collect_until = next_update_time();
     }
 
-    pub async fn check_collection_time(&mut self, cache_http: impl CacheHttp) -> Option<String> {
+    pub async fn collect_report(&mut self, cache_http: impl CacheHttp, conf: &Config) -> Option<String> {
         let next_time = next_update_time();
-        if self.collect_until == next_time {
-            println!("Collection time is not reached yet");
-            return None;
-        }
-        println!("Collection time reached");
-
         self.last_collection_duration = self.collect_until - self.collection_start;
         self.collection_start = self.collect_until;
         self.collect_until = next_time;
         self.message_streak.flush_records();
-        self.message_streak.format_results_table(cache_http).await
+        self.message_streak.format_results_table(cache_http, conf).await
     }
 }
 
@@ -42,7 +38,7 @@ pub struct MessageStreak {
 }
 
 impl MessageStreak {
-    pub async fn format_results_table(&self, cache_http: impl CacheHttp) -> Option<String> {
+    pub async fn format_results_table(&self, cache_http: impl CacheHttp, conf: &Config) -> Option<String> {
         let user_header = "User".to_string();
         let messages_header = "Messages".to_string();
         let series_header = "Max series".to_string();
@@ -65,7 +61,7 @@ impl MessageStreak {
         };
 
         for (user_id, personal_record) in self.personal_record.iter() {
-            let user_name = get_user_name(user_id, &cache_http).await;
+            let user_name = get_user_name(user_id, &cache_http, conf).await;
             user_name_list.push(user_name);
 
             let channel_name = get_channel_name(&personal_record.channel_id, &cache_http).await;
@@ -73,15 +69,17 @@ impl MessageStreak {
         }
 
         for user_name in user_name_list {
-            println!("{:>2} | {user_name}", count_symbols(&user_name));
-            if count_symbols(&user_name) > max_symbols_in_user_name {
-                max_symbols_in_user_name = count_symbols(&user_name);
+            // println!("{:>2} | {user_name}", count_symbols(&user_name));
+            let symbols = count_symbols(&user_name);
+            if symbols > max_symbols_in_user_name {
+                max_symbols_in_user_name = symbols;
             }
         }
 
         for channel_name in channel_name_list {
-            if count_symbols(&channel_name) > max_symbols_in_series_channel_name {
-                max_symbols_in_series_channel_name = count_symbols(&channel_name);
+            let symbols = count_symbols(&channel_name);
+            if symbols > max_symbols_in_series_channel_name {
+                max_symbols_in_series_channel_name = symbols;
             }
         }
         let max_symbols_in_series = max_symbols_in_series_channel_name + 4 + 4; // 4 - for " in ", 4 - for digits
@@ -92,18 +90,25 @@ impl MessageStreak {
         }
 
         rows.push(format!("{user_header:<max_symbols_in_user_name$} | {messages_header:<max_symbols_in_messages$} | {series_header:<max_symbols_in_series$} | {attachments_header:<max_symbols_in_attachments$}"));
-        rows.push(format!("{:<max_symbols_in_user_name$} | {:<max_symbols_in_messages$} | {:<max_symbols_in_series$} | {:<max_symbols_in_attachments$}", "", "", "", ""));
+        rows.push(format!("{:-<max_symbols_in_user_name$}-|-{:-<max_symbols_in_messages$}-|-{:-<max_symbols_in_series$}-|-{:-<max_symbols_in_attachments$}", "-", "-", "-", "-"));
 
         for (user_id, personal_record) in self.personal_record.iter() {
-            let user_name = get_user_name(user_id, &cache_http).await;
+            let user_name = get_user_name(user_id, &cache_http, conf).await;
+            let user_name_pad = max_symbols_in_user_name - count_symbols(&user_name);
+            let user_name = format!("{user_name}{:<user_name_pad$}", "");
+
             let messages_count = self.messages_count.get(user_id).unwrap_or(&0);
             let series_record_counter = personal_record.counter;
             let series_record_channel_name =
                 get_channel_name(&personal_record.channel_id, &cache_http).await;
             let attachments_count = self.attachments_count.get(user_id).unwrap_or(&0);
 
-            rows.push(format!("{user_name:<max_symbols_in_user_name$} | {messages_count:>max_symbols_in_messages$} | {series_record_counter:>4} in {series_record_channel_name:<max_symbols_in_series_channel_name$} | {attachments_count:>max_symbols_in_attachments$}"));
+            rows.push(format!("{user_name} | {messages_count:>max_symbols_in_messages$} | {series_record_counter:>4} in {series_record_channel_name:<max_symbols_in_series_channel_name$} | {attachments_count:>max_symbols_in_attachments$}"));
         }
+
+        rows.iter().for_each(|row| {
+            println!("{}", row);
+        });
 
         Some(rows.join("\n"))
     }
@@ -199,39 +204,29 @@ impl MessageStreakPersonalRecord {
 }
 
 pub fn next_update_time() -> chrono::NaiveDateTime {
+    // let next = next_update_time_min();
+    let next = next_sunday_start_time();
+    println!("Next update time: UTC {:?}", next);
+    next
+}
+
+fn next_sunday_start_time() -> chrono::NaiveDateTime {
+    let current_time = chrono::Utc::now().naive_utc(); // Get current local time
+    let current_weekday = current_time.weekday(); // Get current weekday
+
+    // Calculate days until next Sunday
+    let days_until_sunday = 7 - current_weekday.num_days_from_sunday();
+    let next_sunday = current_time.date() + chrono::Duration::days(days_until_sunday as i64); // Calculate next Sunday
+
+    // Set time to start of the day (00:00:00)
+    next_sunday.and_hms_opt(0, 0, 0).expect("Invalid time") // Return NaiveDateTime for next Sunday at midnight
+}
+
+pub fn next_update_time_min() -> chrono::NaiveDateTime {
     let now = chrono::Utc::now().naive_utc();
-    let next = now + chrono::Duration::hours(1);
+    let next = now + chrono::Duration::minutes(1) + chrono::Duration::seconds(10);
     chrono::NaiveDateTime::new(
         next.date(),
-        chrono::NaiveTime::from_hms_opt(next.hour(), 0, 0).unwrap(),
+        chrono::NaiveTime::from_hms_opt(next.hour(), next.minute(), 0).unwrap(),
     )
-}
-
-pub async fn get_channel_name(channel_id: &ChannelId, cache_http: impl CacheHttp) -> String {
-    let undefined_channel = "In the middle of nowhere".to_string();
-    channel_id
-        .name(&cache_http)
-        .await
-        .unwrap_or(undefined_channel)
-}
-
-pub async fn get_user_name(user_id: &UserId, cache_http: impl CacheHttp) -> String {
-    let undefined_user = "Ахиллес сын Пелея".to_string();
-
-    match user_id.to_user(&cache_http).await {
-        Err(_) => undefined_user,
-        Ok(user) => match user
-            .nick_in(cache_http, GuildId::from(1245747866555908197)) // TODO - move to config
-            .await
-        {
-            Some(local) => local,
-            None => user.global_name.unwrap_or(undefined_user),
-        },
-    }
-}
-
-use unicode_segmentation::UnicodeSegmentation;
-
-pub fn count_symbols(s: &str) -> usize {
-    s.graphemes(true).count()
 }
