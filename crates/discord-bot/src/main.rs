@@ -38,7 +38,8 @@ impl EventHandler for Handler {
         let config_guard = self.config.lock().await;
         let conf = config_guard.clone();
         drop(config_guard);
-        agr_to_someone(ctx.clone(), &msg, storage_guard.self_id, &conf).await;
+        react_to_mention(ctx.clone(), &msg, storage_guard.self_id, &conf).await;
+        // agr_to_someone(ctx.clone(), &msg, storage_guard.self_id, &conf).await;
     }
 
     // Set a handler to be called on the `ready` event. This is called when a shard is booted, and
