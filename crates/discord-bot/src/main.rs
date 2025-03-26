@@ -12,13 +12,16 @@ use stat::*;
 use storage::*;
 use util::*;
 
-use serenity::all::UserId;
 use serenity::async_trait;
 use serenity::model::channel::Message;
 use serenity::model::gateway::Ready;
 use serenity::prelude::*;
-use std::{clone, env};
+use std::env;
 use std::sync::Arc;
+
+use serenity::client::Client;
+use serenity::model::gateway::GatewayIntents;
+use tokio::signal;
 
 struct Handler {
     stat: Arc<Mutex<Stat>>,
@@ -30,7 +33,7 @@ struct Handler {
 impl EventHandler for Handler {
     async fn message(&self, ctx: Context, msg: Message) {
         let mut stat_guard = self.stat.lock().await;
-        stat_guard.message_streak.update_streak(&msg);
+        stat_guard.message_stat.update_streak(&msg);
         let storage_guard = self.storage.lock().await;
         let config_guard = self.config.lock().await;
         let conf = config_guard.clone();
@@ -61,7 +64,7 @@ async fn main() {
         | GatewayIntents::DIRECT_MESSAGES
         | GatewayIntents::MESSAGE_CONTENT;
 
-    let stat = Stat::default();
+    let stat = Stat::load_from_file("stat.json").unwrap_or_default();
     let arc_stat = Arc::new(Mutex::new(stat));
     let config = init_config();
     let arc_config = Arc::new(Mutex::new(config.clone()));
@@ -77,7 +80,31 @@ async fn main() {
         .await
         .expect("Err creating client");
 
-    stat_reporter(client.http.clone(), arc_stat, config);
+    stat_reporter(client.http.clone(), arc_stat.clone(), config);
+
+    // Clone the shard manager to use for graceful shutdown.
+    let shard_manager = client.shard_manager.clone();
+
+    // Spawn a task to listen for Ctrl+C and then shut down gracefully.
+    tokio::spawn({
+        let arc_stat = arc_stat.clone();
+        async move {
+            // Wait for the Ctrl+C signal.
+            signal::ctrl_c()
+                .await
+                .expect("Failed to listen for Ctrl+C signal");
+            println!("Received Ctrl+C, shutting down gracefully...");
+
+            let stat_guard = arc_stat.lock().await;
+            match stat_guard.save_to_file("stat.json") {
+                Ok(_) => println!("State saved to stat.json"),
+                Err(e) => eprintln!("Error saving stat: {}", e),
+            }
+
+            // Shut down all shards gracefully.
+            shard_manager.shutdown_all().await;
+        }
+    });
 
     // Finally, start a single shard, and start listening to events.
     //
@@ -89,11 +116,5 @@ async fn main() {
 }
 
 pub fn format_table(s: String, d: chrono::Duration) -> String {
-    [
-        "Личный зачёт по флуду за неделю:",
-        "```",
-        s.as_str(),
-        "```",
-    ]
-    .join("\n")
+    ["Личный зачёт по флуду за неделю:", "```", s.as_str(), "```"].join("\n")
 }

@@ -30,7 +30,7 @@ pub fn stat_reporter(http: Arc<Http>, stat: Arc<Mutex<Stat>>, conf: Config) {
             } else {
                 println!("No data to report");
             };
-            stat_guard.message_streak = MessageStreak::default();
+            stat_guard.message_stat = MessageStat::default();
         }
     });
 }

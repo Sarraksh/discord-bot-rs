@@ -1,15 +1,20 @@
 use super::*;
 
 use chrono::{Datelike, Timelike};
+use serde::{Deserialize, Serialize};
 use serenity::all::{CacheHttp, ChannelId, Message, UserId};
 use std::{collections::HashMap, vec};
 
-#[derive(Debug, Default)]
+use std::fs::File;
+use std::io::{BufReader, BufWriter};
+use std::error::Error;
+
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct Stat {
     pub collection_start: chrono::NaiveDateTime,
     pub collect_until: chrono::NaiveDateTime,
     pub last_collection_duration: chrono::Duration,
-    pub message_streak: MessageStreak,
+    pub message_stat: MessageStat,
 }
 
 impl Stat {
@@ -19,26 +24,50 @@ impl Stat {
         self.collect_until = next_update_time();
     }
 
-    pub async fn collect_report(&mut self, cache_http: impl CacheHttp, conf: &Config) -> Option<String> {
+    pub async fn collect_report(
+        &mut self,
+        cache_http: impl CacheHttp,
+        conf: &Config,
+    ) -> Option<String> {
         let next_time = next_update_time();
         self.last_collection_duration = self.collect_until - self.collection_start;
         self.collection_start = self.collect_until;
         self.collect_until = next_time;
-        self.message_streak.flush_records();
-        self.message_streak.format_results_table(cache_http, conf).await
+        self.message_stat.flush_records();
+        self.message_stat
+            .format_results_table(cache_http, conf)
+            .await
+    }
+
+    pub fn save_to_file(&self, file_path: &str) -> Result<(), Box<dyn Error>> {
+        let file = File::create(file_path)?;
+        let writer = BufWriter::new(file);
+        serde_json::to_writer(writer, self)?;
+        Ok(())
+    }
+
+    pub fn load_from_file(file_path: &str) -> Result<Stat, Box<dyn Error>> {
+        let file = File::open(file_path)?;
+        let reader = BufReader::new(file);
+        let stat = serde_json::from_reader(reader)?;
+        Ok(stat)
     }
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct MessageStreak {
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct MessageStat {
     pub current_by_channel: HashMap<ChannelId, MessageStreakUser>, // per channel, latest user and current streak
     pub personal_record: HashMap<UserId, MessageStreakPersonalRecord>, // per user record with chanel in which achieved
     pub messages_count: HashMap<UserId, usize>,
     pub attachments_count: HashMap<UserId, usize>,
 }
 
-impl MessageStreak {
-    pub async fn format_results_table(&self, cache_http: impl CacheHttp, conf: &Config) -> Option<String> {
+impl MessageStat {
+    pub async fn format_results_table(
+        &self,
+        cache_http: impl CacheHttp,
+        conf: &Config,
+    ) -> Option<String> {
         let user_header = "User".to_string();
         let messages_header = "Messages".to_string();
         let series_header = "Max series".to_string();
@@ -169,7 +198,7 @@ impl MessageStreak {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct MessageStreakUser {
     pub user_id: UserId,
     pub counter: usize,
@@ -188,7 +217,7 @@ impl MessageStreakUser {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct MessageStreakPersonalRecord {
     pub channel_id: ChannelId,
     pub counter: usize,

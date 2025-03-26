@@ -25,16 +25,15 @@ pub async fn agr_to_someone(ctx: Context, msg: &Message, self_id: UserId, conf: 
         format!("{victim_name}, товарищ майор проинформирован о вашем поведении. Добавлена запись в личное дело."),
         format!("{victim_name}, а минусы будут?"),
         format!("К {victim_name} сзади подкрался крипер :boom:"),
-        format!("Вжух! Теперь {victim_name} фуриёб =D"),
         format!("{victim_name}, где макет?!"),
         format!("{victim_name} выдал базу"),
         format!("{victim_name} выдал кринж"),
+        format!("{victim_name} иди-ка проспись"),
     ];
     let random_text_index = rand::rng().random_range(0..text.len());
     let random_text = text[random_text_index].clone();
 
     if let Err(why) = msg.channel_id.say(&ctx.http, random_text).await {
-        println!("Error sending message: {why:?}");
-        return;
+        println!("Error sending message: {why:?}")
     }
 }
