@@ -10,6 +10,7 @@ pub async fn get_channel_name(channel_id: &ChannelId, cache_http: impl CacheHttp
         .unwrap_or(undefined_channel)
 }
 
+// TODO - log process
 pub async fn get_user_name(user_id: &UserId, cache_http: impl CacheHttp, conf: &Config) -> String {
     let undefined_user = "Ахиллес сын Пелея".to_string();
 

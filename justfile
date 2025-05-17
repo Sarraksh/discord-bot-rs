@@ -1,9 +1,15 @@
 build:
   cargo build --bin discord-bot
 
+build-release:
+  cargo build --bin discord-bot --release
+
 run:
-  DISCORD_TOKEN=$(cat ./.api-key) \
-  OVERRIDE_USER_ID=$(cat ./.user-id) \
-  OVERRIDE_USER_NAME=$(cat ./.user-name) \
-  GUILD_ID=$(cat ./.guild-id) \
-  cargo run --bin discord-bot
+  ./run.sh cargo run --bin discord-bot
+
+cd:
+  ./.cd.sh
+
+cd-full:
+  cargo build --bin discord-bot
+  ./.cd-full.sh

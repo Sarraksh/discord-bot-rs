@@ -38,7 +38,13 @@ impl EventHandler for Handler {
         let config_guard = self.config.lock().await;
         let conf = config_guard.clone();
         drop(config_guard);
-        react_to_mention(ctx.clone(), &msg, storage_guard.self_id, &conf).await;
+        if react_to_mention(&ctx, &msg, storage_guard.self_id, &conf).await {
+            return;
+        };
+        if react_to_trigger_word(&ctx, &msg, storage_guard.self_id, &conf).await {
+            return;
+        };
+        // TODO - enable later
         // agr_to_someone(ctx.clone(), &msg, storage_guard.self_id, &conf).await;
     }
 
@@ -60,12 +66,14 @@ impl EventHandler for Handler {
 
 #[tokio::main]
 async fn main() {
+    let stat_save_file = "stat.json"; // TODO - move to config
+
     // Set gateway intents, which decides what events the bot will be notified about
     let intents = GatewayIntents::GUILD_MESSAGES
         | GatewayIntents::DIRECT_MESSAGES
         | GatewayIntents::MESSAGE_CONTENT;
 
-    let stat = Stat::load_from_file("stat.json").unwrap_or_default();
+    let stat = Stat::load_from_file(stat_save_file).unwrap_or_default();
     let arc_stat = Arc::new(Mutex::new(stat));
     let config = init_config();
     let arc_config = Arc::new(Mutex::new(config.clone()));
@@ -97,8 +105,8 @@ async fn main() {
             println!("Received Ctrl+C, shutting down gracefully...");
 
             let stat_guard = arc_stat.lock().await;
-            match stat_guard.save_to_file("stat.json") {
-                Ok(_) => println!("State saved to stat.json"),
+            match stat_guard.save_to_file(stat_save_file) {
+                Ok(_) => println!("State saved to {stat_save_file}"),
                 Err(e) => eprintln!("Error saving stat: {}", e),
             }
 
