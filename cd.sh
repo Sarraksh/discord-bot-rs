@@ -11,10 +11,10 @@ case $1 in
     tar -czf $ARCHIVE_NAME .config run.sh
     ;;
   bin)
-    tar -czf $ARCHIVE_NAME -C target/debug discord-bot
+    tar -czf $ARCHIVE_NAME -C target/debug discord-bot telegram-bot kemono-ingester
     ;;
   full)
-    tar -czf $ARCHIVE_NAME .config run.sh -C target/debug discord-bot
+    tar -czf $ARCHIVE_NAME .config run.sh -C target/debug discord-bot telegram-bot kemono-ingester
     ;;
   *)
     echo "Usage: $0 {cfg|bin|full}"

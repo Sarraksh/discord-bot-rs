@@ -1,0 +1,10 @@
+[package]
+name = "kemono-ingester"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+kemono = { path = "../kemono" }
+tokio = { version = "1", features = ["full"] }
+notify = "6.0"
+uuid = { version = "1", features = ["v4"] }
