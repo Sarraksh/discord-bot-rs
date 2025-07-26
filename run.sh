@@ -12,4 +12,5 @@ ERROR_OLLAMA_ERROR=$(cat ./.config/error-ollama-error) \
 ERROR_NO_MESSAGES=$(cat ./.config/error-no-messages) \
 TRIGGER_WORDS=$(cat ./.config/trigger-words) \
 TABLE_HEADER=$(cat ./.config/table-header) \
+TELOXIDE_TOKEN=$(cat ./.config/teloxide-token) \
 "$@"

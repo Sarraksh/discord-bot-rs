@@ -1,3 +1,5 @@
+set dotenv-load := true
+
 build:
   cargo build --bin discord-bot
 
@@ -7,9 +9,13 @@ build-release:
 run:
   ./run.sh cargo run --bin discord-bot
 
-cd:
-  ./.cd.sh
-
 cd-full:
   cargo build --bin discord-bot
-  ./.cd-full.sh
+  ./cd.sh full
+
+cd-bin:
+  cargo build --bin discord-bot
+  ./cd.sh bin
+
+cd-cfg:
+  ./cd.sh cfg

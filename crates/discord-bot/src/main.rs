@@ -1,6 +1,7 @@
 mod config;
 mod messages;
 mod reporter;
+mod send_images;
 mod stat;
 mod storage;
 mod util;
@@ -8,6 +9,7 @@ mod util;
 use config::*;
 use messages::*;
 use reporter::*;
+use send_images::*;
 use stat::*;
 use storage::*;
 use util::*;
@@ -22,6 +24,7 @@ use std::sync::Arc;
 use serenity::client::Client;
 use serenity::model::gateway::GatewayIntents;
 use tokio::signal;
+use tokio::sync::watch;
 
 struct Handler {
     stat: Arc<Mutex<Stat>>,
@@ -92,27 +95,35 @@ async fn main() {
     stat_reporter(client.http.clone(), arc_stat.clone(), config);
 
     // Clone the shard manager to use for graceful shutdown.
+    let (shutdown_tx, shutdown_rx) = watch::channel::<bool>(false);
     let shard_manager = client.shard_manager.clone();
 
+    tokio::spawn(telegram::handle_telegram_photos());
+    tokio::spawn(watch_and_send_discord_folders(token, 1245814193446326322));
+
+    println!("Starting Discord bot...");
+
     // Spawn a task to listen for Ctrl+C and then shut down gracefully.
-    tokio::spawn({
-        let arc_stat = arc_stat.clone();
-        async move {
-            // Wait for the Ctrl+C signal.
-            signal::ctrl_c()
-                .await
-                .expect("Failed to listen for Ctrl+C signal");
-            println!("Received Ctrl+C, shutting down gracefully...");
+    let arc_stat_clone = arc_stat.clone();
+    let shutdown_tx_clone = shutdown_tx.clone();
 
-            let stat_guard = arc_stat.lock().await;
-            match stat_guard.save_to_file(stat_save_file) {
-                Ok(_) => println!("State saved to {stat_save_file}"),
-                Err(e) => eprintln!("Error saving stat: {}", e),
-            }
+    tokio::spawn(async move {
+        signal::ctrl_c().await.expect("Failed to listen for Ctrl+C");
+        println!("Received Ctrl+C, initiating shutdown...");
+        shutdown_tx_clone.send(true).ok();
 
-            // Shut down all shards gracefully.
-            shard_manager.shutdown_all().await;
+        let stat_guard = arc_stat_clone.lock().await;
+        match stat_guard.save_to_file(stat_save_file) {
+            Ok(_) => println!("State saved to {stat_save_file}"),
+            Err(e) => eprintln!("Error saving stat: {}", e),
         }
+
+        shard_manager.shutdown_all().await;
+    });
+
+    let shutdown = shutdown_rx.clone();
+    tokio::spawn(async move {
+        kemono::start_kemono_ingest_loop(shutdown).await;
     });
 
     // Finally, start a single shard, and start listening to events.
@@ -122,8 +133,4 @@ async fn main() {
     if let Err(why) = client.start().await {
         println!("Client error: {why:?}");
     }
-}
-
-pub fn format_table(s: String, d: chrono::Duration) -> String {
-    ["Личный зачёт по флуду за неделю:", "```", s.as_str(), "```"].join("\n")
 }
