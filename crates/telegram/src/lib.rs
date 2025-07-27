@@ -30,20 +30,23 @@ pub async fn handle_telegram_photos() {
 
         async move {
             if let MessageKind::Common(msg_common) = &msg.kind {
-                if let Some(user) = &msg.from() {
+                if let Some(user) = &msg.from {
                     let user_id = user.id;
 
-                    // Rule for Kemono URL
+                    // Rule for Kemono/Coomer URL
                     if let Some(text) = &msg.text() {
-                        let kemono_regex =
-                            Regex::new(r"https://kemono\.su/[^/]+/user/\d+/post/\d+").unwrap();
-                        if let Some(url) = kemono_regex.find(text) {
+                        let site_regex =
+                            Regex::new(r"https://(kemono|coomer)\.su/[^/]+/user/\d+/post/\d+")
+                                .unwrap();
+                        if let Some(url) = site_regex.find(text) {
                             let url_str = url.as_str().to_string();
                             tokio::spawn(async move {
                                 match kemono::download_from_kemono_url(&url_str).await {
-                                    Ok(_) => {},
+                                    Ok(_) => {}
                                     Err(e) => {
-                                        log::error!("Failed to download from Kemono URL: {e}");
+                                        log::error!(
+                                            "Failed to download from Kemono/Coomer URL: {e}"
+                                        );
                                     }
                                 }
                             });
@@ -56,21 +59,21 @@ pub async fn handle_telegram_photos() {
                             .iter()
                             .max_by_key(|p| p.file.size)
                             .map(|p| Attachment {
-                                file_id: p.file.id.clone(),
-                                original_path: p.file.id.clone(),
+                                file_id: p.file.id.to_string(),
+                                original_path: p.file.id.to_string(),
                             }),
                         MediaKind::Document(MediaDocument { document, .. }) => Some(Attachment {
-                            file_id: document.file.id.clone(),
-                            original_path: document.file.id.clone(),
+                            file_id: document.file.id.to_string(),
+                            original_path: document.file.id.to_string(),
                         }),
                         MediaKind::Video(MediaVideo { video, .. }) => Some(Attachment {
-                            file_id: video.file.id.clone(),
-                            original_path: video.file.id.clone(),
+                            file_id: video.file.id.to_string(),
+                            original_path: video.file.id.to_string(),
                         }),
                         MediaKind::Animation(MediaAnimation { animation, .. }) => {
                             Some(Attachment {
-                                file_id: animation.file.id.clone(),
-                                original_path: animation.file.id.clone(),
+                                file_id: animation.file.id.to_string(),
+                                original_path: animation.file.id.to_string(),
                             })
                         }
                         _ => None,
@@ -150,7 +153,7 @@ pub async fn handle_telegram_photos() {
 
 async fn download_and_save_file(bot: &Bot, file_id: &str, folder: &str) -> Result<(), String> {
     let file = bot
-        .get_file(file_id)
+        .get_file(file_id.to_owned().into())
         .send()
         .await
         .map_err(|e| format!("get_file failed: {e}"))?;

@@ -28,14 +28,15 @@ struct Post {
 const ALLOWED_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "mp4", "mov", "gif", "webp"];
 const MAX_FILE_SIZE: u64 = 50_000_000;
 
-pub async fn download_kemono_post_files(
+pub async fn download_post_files(
+    domain: &str,
     service: &str,
     user_id: &str,
     post_id: &str,
 ) -> Result<String, Box<dyn std::error::Error>> {
     let url = format!(
-        "https://kemono.su/api/v1/{}/user/{}/post/{}",
-        service, user_id, post_id
+        "https://{}/api/v1/{}/user/{}/post/{}",
+        domain, service, user_id, post_id
     );
 
     let client = reqwest::Client::new();
@@ -92,7 +93,7 @@ pub async fn download_kemono_post_files(
             continue;
         }
 
-        let file_url = format!("https://kemono.su{}", file.path);
+        let file_url = format!("https://{}{}", domain, file.path);
         println!("Checking file: {}", file_url);
 
         let head = client.head(&file_url).send().await?;
@@ -146,24 +147,29 @@ pub async fn download_kemono_post_files(
     }
 }
 
-/// Parses the Kemono post URL and calls the API download function
+/// Parses the Kemono or Coomer post URL and calls the API download function
 pub async fn download_from_kemono_url(url: &str) -> Result<String, Box<dyn std::error::Error>> {
     // Example: https://kemono.su/patreon/user/82530106/post/128244687
-    let parts: Vec<&str> = url
-        .trim_start_matches("https://kemono.su/")
-        .trim_end_matches('/')
-        .split('/')
-        .collect();
+    // Example: https://coomer.su/onlyfans/user/12345/post/67890
+    let (domain, path) = if url.starts_with("https://kemono.su/") {
+        ("kemono.su", url.trim_start_matches("https://kemono.su/"))
+    } else if url.starts_with("https://coomer.su/") {
+        ("coomer.su", url.trim_start_matches("https://coomer.su/"))
+    } else {
+        return Err("Invalid URL format. Must be kemono.su or coomer.su".into());
+    };
+
+    let parts: Vec<&str> = path.trim_end_matches('/').split('/').collect();
 
     if parts.len() != 5 || parts[1] != "user" || parts[3] != "post" {
-        return Err("Invalid Kemono URL format.".into());
+        return Err("Invalid URL format.".into());
     }
 
     let service = parts[0];
     let user_id = parts[2];
     let post_id = parts[4];
 
-    download_kemono_post_files(service, user_id, post_id).await
+    download_post_files(domain, service, user_id, post_id).await
 }
 
 /// Makes file system-safe names
@@ -176,6 +182,7 @@ pub struct ArtistEntry {
     pub author_name: Option<String>,
     pub platform: String,
     pub user_id: String,
+    pub domain: String,
     #[serde(default)]
     pub last_ingested: Option<String>,
 }
@@ -217,8 +224,8 @@ async fn fetch_and_ingest_posts(
     artist: &ArtistEntry,
 ) -> Result<Option<String>, Box<dyn std::error::Error>> {
     let url = format!(
-        "https://kemono.su/api/v1/{}/user/{}",
-        artist.platform, artist.user_id
+        "https://{}/api/v1/{}/user/{}",
+        artist.domain, artist.platform, artist.user_id
     );
     let posts: Vec<PostSummary> = reqwest::get(&url).await?.json().await?;
     // TODO - implement sorting by date for now rely to order from response
@@ -239,8 +246,8 @@ async fn fetch_and_ingest_posts(
 
     for post in new_posts.iter().rev() {
         let post_url = format!(
-            "https://kemono.su/{}/user/{}/post/{}",
-            artist.platform, artist.user_id, post.id
+            "https://{}/{}/user/{}/post/{}",
+            artist.domain, artist.platform, artist.user_id, post.id
         );
         println!("Ingesting: {}", post_url);
         let _ = download_from_kemono_url(&post_url).await;
