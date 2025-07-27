@@ -13,7 +13,7 @@ services:
         COPY ./run.sh /app/run.sh
         RUN chmod +x /app/discord-bot
         RUN chmod +x /app/run.sh
-        CMD ["./run.sh", "./discord-bot"]
+        CMD ["./discord-bot"]
     container_name: discord-bot
     volumes:
       - ./.config:/app/.config:rw
@@ -22,6 +22,20 @@ services:
     restart: unless-stopped
     networks:
       - bot-network
+    environment:
+      DISCORD_TOKEN: $DISCORD_TOKEN
+      OVERRIDE_USER_ID: $OVERRIDE_USER_ID
+      OVERRIDE_USER_NAME: $OVERRIDE_USER_NAME
+      GUILD_ID: $GUILD_ID
+      SYSTEM_PROMPT: $SYSTEM_PROMPT
+      MODEL_NAME: $MODEL_NAME
+      OLLAMA_HOST: $OLLAMA_HOST
+      OLLAMA_PORT: $OLLAMA_PORT
+      ERROR_OLLAMA_ERROR: $ERROR_OLLAMA_ERROR
+      ERROR_NO_MESSAGES: $ERROR_NO_MESSAGES
+      TRIGGER_WORDS: $TRIGGER_WORDS
+      TABLE_HEADER: $TABLE_HEADER
+      TELOXIDE_TOKEN: $TELOXIDE_TOKEN
 
   telegram-bot:
     build:
@@ -37,7 +51,7 @@ services:
         COPY ./run.sh /app/run.sh
         RUN chmod +x /app/telegram-bot
         RUN chmod +x /app/run.sh
-        CMD ["./run.sh", "./telegram-bot"]
+        CMD ["./telegram-bot"]
     container_name: telegram-bot
     volumes:
       - ./.config:/app/.config:rw
@@ -45,6 +59,20 @@ services:
     restart: unless-stopped
     networks:
       - bot-network
+    environment:
+      DISCORD_TOKEN: $DISCORD_TOKEN
+      OVERRIDE_USER_ID: $OVERRIDE_USER_ID
+      OVERRIDE_USER_NAME: $OVERRIDE_USER_NAME
+      GUILD_ID: $GUILD_ID
+      SYSTEM_PROMPT: $SYSTEM_PROMPT
+      MODEL_NAME: $MODEL_NAME
+      OLLAMA_HOST: $OLLAMA_HOST
+      OLLAMA_PORT: $OLLAMA_PORT
+      ERROR_OLLAMA_ERROR: $ERROR_OLLAMA_ERROR
+      ERROR_NO_MESSAGES: $ERROR_NO_MESSAGES
+      TRIGGER_WORDS: $TRIGGER_WORDS
+      TABLE_HEADER: $TABLE_HEADER
+      TELOXIDE_TOKEN: $TELOXIDE_TOKEN
 
   kemono-ingester:
     build:
@@ -60,7 +88,7 @@ services:
         COPY ./run.sh /app/run.sh
         RUN chmod +x /app/kemono-ingester
         RUN chmod +x /app/run.sh
-        CMD ["./run.sh", "./kemono-ingester"]
+        CMD ["./kemono-ingester"]
     container_name: kemono-ingester
     volumes:
       - ./.config:/app/.config:rw
@@ -68,6 +96,20 @@ services:
     restart: unless-stopped
     networks:
       - bot-network
+    environment:
+      DISCORD_TOKEN: $DISCORD_TOKEN
+      OVERRIDE_USER_ID: $OVERRIDE_USER_ID
+      OVERRIDE_USER_NAME: $OVERRIDE_USER_NAME
+      GUILD_ID: $GUILD_ID
+      SYSTEM_PROMPT: $SYSTEM_PROMPT
+      MODEL_NAME: $MODEL_NAME
+      OLLAMA_HOST: $OLLAMA_HOST
+      OLLAMA_PORT: $OLLAMA_PORT
+      ERROR_OLLAMA_ERROR: $ERROR_OLLAMA_ERROR
+      ERROR_NO_MESSAGES: $ERROR_NO_MESSAGES
+      TRIGGER_WORDS: $TRIGGER_WORDS
+      TABLE_HEADER: $TABLE_HEADER
+      TELOXIDE_TOKEN: $TELOXIDE_TOKEN
 
 networks:
   bot-network:
