@@ -31,7 +31,7 @@ async fn main() {
 
         async move {
             if let MessageKind::Common(msg_common) = &msg.kind {
-                if let Some(user) = &msg.from() {
+                if let Some(user) = &msg.from {
                     let user_id = user.id;
 
                     // Rule for Kemono URL - save to file instead of processing directly
@@ -55,21 +55,21 @@ async fn main() {
                             .iter()
                             .max_by_key(|p| p.file.size)
                             .map(|p| Attachment {
-                                file_id: p.file.id.clone(),
-                                original_path: p.file.id.clone(),
+                                file_id: p.file.id.to_string(),
+                                original_path: p.file.id.to_string(),
                             }),
                         MediaKind::Document(MediaDocument { document, .. }) => Some(Attachment {
-                            file_id: document.file.id.clone(),
-                            original_path: document.file.id.clone(),
+                            file_id: document.file.id.to_string(),
+                            original_path: document.file.id.to_string(),
                         }),
                         MediaKind::Video(MediaVideo { video, .. }) => Some(Attachment {
-                            file_id: video.file.id.clone(),
-                            original_path: video.file.id.clone(),
+                            file_id: video.file.id.to_string(),
+                            original_path: video.file.id.to_string(),
                         }),
                         MediaKind::Animation(MediaAnimation { animation, .. }) => {
                             Some(Attachment {
-                                file_id: animation.file.id.clone(),
-                                original_path: animation.file.id.clone(),
+                                file_id: animation.file.id.to_string(),
+                                original_path: animation.file.id.to_string(),
                             })
                         }
                         _ => None,
@@ -149,7 +149,7 @@ async fn main() {
 
 async fn download_and_save_file(bot: &Bot, file_id: &str, folder: &str) -> Result<(), String> {
     let file = bot
-        .get_file(file_id)
+        .get_file(file_id.to_owned().into())
         .send()
         .await
         .map_err(|e| format!("get_file failed: {e}"))?;
