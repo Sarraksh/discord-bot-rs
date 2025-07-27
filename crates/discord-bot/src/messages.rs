@@ -9,6 +9,7 @@ use regex::Regex;
 use serenity::all::{CreateMessage, GetMessages, UserId};
 use serenity::model::channel::Message;
 use serenity::prelude::*;
+use tracing::{error, info, warn};
 
 // TODO - implement send and immediately edit to add link to user without mention
 // TODO - implement pause fo particular messages in channel
@@ -38,7 +39,7 @@ pub async fn agr_to_someone(ctx: Context, msg: &Message, self_id: UserId, conf: 
     let random_text = text[random_text_index].clone();
 
     if let Err(why) = msg.channel_id.say(&ctx.http, random_text).await {
-        println!("Error sending message: {why:?}")
+        error!("Error sending message: {why:?}")
     }
 }
 
@@ -102,7 +103,7 @@ pub async fn react(ctx: &Context, msg: &Message, self_id: UserId, conf: &Config)
 
     let response_text = match messages_chain.len() {
         0 => {
-            println!("No messages in the chain");
+            warn!("No messages in the chain");
             env::var("ERROR_NO_MESSAGES").unwrap_or_else(|_| "ERROR_NO_MESSAGES".to_string())
         }
         _ => {
@@ -112,7 +113,7 @@ pub async fn react(ctx: &Context, msg: &Message, self_id: UserId, conf: &Config)
             match ollama.send_chat_messages(request).await {
                 Ok(response) => response.message.content,
                 Err(e) => {
-                    println!("Error: {}", e);
+                    error!("Error: {}", e);
                     env::var("ERROR_OLLAMA_ERROR")
                         .unwrap_or_else(|_| "ERROR_OLLAMA_ERROR".to_string())
                 }
@@ -120,8 +121,8 @@ pub async fn react(ctx: &Context, msg: &Message, self_id: UserId, conf: &Config)
         }
     };
 
-    println!("===================================================================================");
-    println!("Response: {}", response_text);
+    info!("===================================================================================");
+    info!("Response: {}", response_text);
     let response_text = remove_think_blocks(&response_text);
     let response_text = replace_mentions(&response_text, &ctx.http, conf).await;
     let response_text = response_text.chars().take(2000).collect::<String>();
@@ -129,9 +130,9 @@ pub async fn react(ctx: &Context, msg: &Message, self_id: UserId, conf: &Config)
         .content(response_text)
         .reference_message(msg);
     if let Err(why) = msg.channel_id.send_message(&ctx.http, builder).await {
-        println!("Error sending message: {why:?}")
+        error!("Error sending message: {why:?}")
     };
-    println!("===================================================================================");
+    info!("===================================================================================");
 
     // Notify the task to stop
     stop_signal.notify_waiters();
@@ -202,11 +203,11 @@ pub async fn get_messages_chain(
 
     let mut current_msg = msg.clone();
     loop {
-        println!("current_msg: {:?}", current_msg.content);
+        info!("current_msg: {:?}", current_msg.content);
         let next_msg = match current_msg.referenced_message.clone() {
             Some(m) => *m,
             None => {
-                println!("there no more referenced_message");
+                info!("there no more referenced_message");
                 return Ok(msg_chain);
             }
         };
@@ -261,7 +262,7 @@ pub async fn process_messages(
     messages_chain.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
     match messages_chain.binary_search_by(|msg| msg.timestamp.cmp(&msg.timestamp)) {
         Ok(index) => messages_chain.truncate(index + 1),
-        Err(_) => println!("================================\nTimestamp not found in messages.\n================================")
+        Err(_) => warn!("================================\nTimestamp not found in messages.\n================================")
     };
 
     Ok(messages_chain

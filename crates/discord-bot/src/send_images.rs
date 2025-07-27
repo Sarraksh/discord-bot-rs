@@ -6,6 +6,7 @@ use std::ffi::OsStr;
 use std::fs;
 use std::path::PathBuf;
 use tokio::time::{sleep, Duration};
+use tracing::error;
 
 const MAX_ATTACHMENTS: usize = 10;
 const MAX_TOTAL_BYTES: u64 = 200 * 1024 * 1024; // 200 MB
@@ -102,7 +103,7 @@ pub async fn watch_and_send_discord_folders(discord_token: String, channel_id: u
                 {
                     Some(e) => e,
                     None => {
-                        eprintln!("Invalid or unreadable .url.json file: {:?}", path);
+                        error!("Invalid or unreadable .url.json file: {:?}", path);
                         continue;
                     }
                 };
@@ -164,13 +165,13 @@ pub async fn watch_and_send_discord_folders(discord_token: String, channel_id: u
             if media_files.is_empty() && has_text {
                 let msg = CreateMessage::new().content(trimmed_message.clone());
                 if let Err(e) = channel.send_message(&http, msg).await {
-                    eprintln!("Failed to send text-only message: {}", e);
+                    error!("Failed to send text-only message: {}", e);
                 }
             }
 
             // Cleanup
             if let Err(e) = fs::remove_dir_all(&path) {
-                eprintln!("Failed to delete folder {:?}: {}", path, e);
+                error!("Failed to delete folder {:?}: {}", path, e);
             }
         }
 
@@ -190,7 +191,7 @@ async fn send_file_chunk(
         match CreateAttachment::path(path).await {
             Ok(att) => attachments.push(att),
             Err(e) => {
-                eprintln!("Failed to create attachment from {:?}: {}", path, e);
+                error!("Failed to create attachment from {:?}: {}", path, e);
             }
         }
     }
@@ -201,7 +202,7 @@ async fn send_file_chunk(
     }
 
     if let Err(e) = channel.send_files(http, attachments, msg).await {
-        eprintln!("Failed to send media files: {:?}", e);
+        error!("Failed to send media files: {:?}", e);
     }
 }
 

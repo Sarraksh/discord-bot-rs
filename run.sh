@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 
+RUST_LOG=info \
 DISCORD_TOKEN=$(cat ./.config/api-key) \
 OVERRIDE_USER_ID=$(cat ./.config/user-id) \
 OVERRIDE_USER_NAME=$(cat ./.config/user-name) \

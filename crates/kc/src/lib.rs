@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::{fs, path::Path};
 use tokio::time::Duration;
 use tokio::{fs::File, io::AsyncWriteExt};
+use tracing::{error, info, warn};
 use uuid::Uuid;
 
 /// A file or attachment
@@ -53,7 +54,8 @@ pub async fn download_post_files(
     }
 
     if files.is_empty() {
-        println!("No supported attachments found.");
+        warn!("No supported attachments found.");
+        return Err("No attachments to download".into());
     }
 
     let uuid = Uuid::new_v4();
@@ -83,21 +85,21 @@ pub async fn download_post_files(
             .unwrap_or_default();
 
         if !ALLOWED_EXTENSIONS.contains(&ext.as_str()) {
-            println!("Skipping unsupported file type: {}", file.name);
+            warn!("Skipping unsupported file type: {}", file.name);
             continue;
         }
 
         let sanitized_name = sanitize_filename(&file.name);
         let save_path = format!("{}/{file_number:0>3}_{}", tmp_dir, sanitized_name);
-        println!("Saving file: {}", save_path);
+        info!("Saving file: {}", save_path);
         if Path::new(&save_path).exists() {
-            println!("Skipping already downloaded: {}", save_path);
+            info!("Skipping already downloaded: {}", save_path);
             continue;
         }
 
         // TODO - fallback to file path without "data" ?
         let file_url = format!("https://{}/data{}", domain, file.path);
-        println!("Checking file: {}", file_url);
+        info!("Checking file: {}", file_url);
 
         let head = client.head(&file_url).send().await?;
         let content_len = head
@@ -108,7 +110,7 @@ pub async fn download_post_files(
 
         if let Some(size) = content_len {
             if size > MAX_FILE_SIZE {
-                println!(
+                info!(
                     "File too large ({} bytes), saving JSON link: {}",
                     size, sanitized_name
                 );
@@ -129,7 +131,7 @@ pub async fn download_post_files(
             }
         }
 
-        println!("Downloading: {}", file_url);
+        info!("Downloading: {}", file_url);
         let mut resp = client.get(&file_url).send().await?;
         let mut out = File::create(&save_path).await?;
         while let Some(chunk) = resp.chunk().await? {
@@ -140,11 +142,11 @@ pub async fn download_post_files(
     fs::create_dir_all("./exchange/messages")?;
     match fs::rename(&tmp_dir, &final_dir) {
         Ok(_) => {
-            println!("Moved to: {}", final_dir);
+            info!("Moved to: {}", final_dir);
             Ok(final_dir)
         }
         Err(e) => {
-            eprintln!("Failed to move directory: {}", e);
+            error!("Failed to move directory: {}", e);
             Err(Box::new(e))
         }
     }
@@ -205,18 +207,18 @@ pub async fn start_kemono_ingest_loop(mut shutdown_signal: tokio::sync::watch::R
             match fetch_and_ingest_posts(artist).await {
                 Ok(Some(new_last_id)) => artist.last_ingested = Some(new_last_id),
                 Ok(None) => (),
-                Err(e) => eprintln!("Error for {}: {}", artist.user_id, e),
+                Err(e) => error!("Error for {}: {}", artist.user_id, e),
             }
         }
 
         if let Err(e) = write_json(path, &artists) {
-            eprintln!("Failed to write JSON: {}", e);
+            error!("Failed to write JSON: {}", e);
         }
 
         tokio::select! {
             _ = tokio::time::sleep(Duration::from_secs(3600)) => continue,
             _ = shutdown_signal.changed() => {
-                println!("Kemono loop shutdown triggered.");
+                info!("Kemono loop shutdown triggered.");
                 break;
             }
         }
@@ -252,7 +254,7 @@ async fn fetch_and_ingest_posts(
             "https://{}/{}/user/{}/post/{}",
             artist.domain, artist.platform, artist.user_id, post.id
         );
-        println!("Ingesting: {}", post_url);
+        info!("Ingesting: {}", post_url);
         let _ = download_from_kemono_url(&post_url).await;
     }
 

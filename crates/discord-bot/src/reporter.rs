@@ -3,6 +3,7 @@ use super::*;
 use serenity::all::Http;
 use serenity::prelude::*;
 use std::sync::Arc;
+use tracing::{error, warn};
 
 pub fn stat_reporter(http: Arc<Http>, stat: Arc<Mutex<Stat>>, conf: Config) {
     tokio::spawn(async move {
@@ -31,10 +32,10 @@ pub fn stat_reporter(http: Arc<Http>, stat: Arc<Mutex<Stat>>, conf: Config) {
                 ]
                 .join("\n");
                 if let Err(why) = flood_channel_id.say(&http, table_message).await {
-                    println!("Error sending message: {why:?}");
+                    error!("Error sending message: {why:?}");
                 }
             } else {
-                println!("No data to report");
+                warn!("No data to report");
             };
             stat_guard.message_stat = MessageStat::default();
         }

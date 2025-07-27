@@ -1,6 +1,7 @@
 use super::*;
 
 use serenity::all::{CacheHttp, ChannelId, GuildId, User, UserId};
+use tracing::warn;
 
 pub async fn get_channel_name(channel_id: &ChannelId, cache_http: impl CacheHttp) -> String {
     let undefined_channel = "In the middle of nowhere".to_string();
@@ -21,7 +22,7 @@ pub async fn get_user_name(user_id: &UserId, cache_http: impl CacheHttp, conf: &
     let user = match user_id.to_user(&cache_http).await {
         Ok(u) => u,
         Err(err) => {
-            println!("Error getting user: {:?}", err);
+            warn!("Error getting user: {:?}", err);
             return undefined_user;
         }
     };
@@ -35,7 +36,7 @@ pub async fn get_user_name(user_id: &UserId, cache_http: impl CacheHttp, conf: &
     match user.name.is_empty() {
         false => user.name,
         true => {
-            println!("User has no name: {:?}", user);
+            warn!("User has no name: {:?}", user);
             undefined_user
         }
     }
