@@ -12,7 +12,6 @@ use teloxide::{
 };
 use tokio::sync::watch;
 use tokio::time::{sleep, Duration, Instant};
-use tracing::{error, info};
 use uuid::Uuid;
 
 type AttachmentQueue = Arc<Mutex<Option<(VecDeque<Attachment>, Instant, UserId)>>>;
@@ -30,7 +29,7 @@ async fn main() {
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
 
-    info!("Starting Telegram bot...");
+    tracing::info!("Starting Telegram bot...");
 
     // Create shutdown coordinator
     let mut shutdown_coordinator = ShutdownCoordinator::new();
@@ -59,17 +58,17 @@ async fn main() {
     shutdown_coordinator.add_task(bot_task);
     shutdown_coordinator.add_task(cleanup_task);
 
-    info!("Telegram bot is running. Press Ctrl+C to stop.");
+    tracing::info!("Telegram bot is running. Press Ctrl+C to stop.");
 
     // Wait for shutdown with 15 second timeout
     let graceful = shutdown_coordinator.wait_for_shutdown(15).await;
     
     if !graceful {
-        error!("Forced shutdown due to timeout");
+        tracing::error!("Forced shutdown due to timeout");
         std::process::exit(1);
     }
 
-    info!("Telegram bot shut down gracefully");
+    tracing::info!("Telegram bot shut down gracefully");
 }
 
 async fn run_telegram_bot(_bot: Bot, attachments: AttachmentQueue, mut shutdown_rx: watch::Receiver<bool>) {
@@ -77,7 +76,7 @@ async fn run_telegram_bot(_bot: Bot, attachments: AttachmentQueue, mut shutdown_
     
     tokio::select! {
         _ = shutdown_rx.changed() => {
-            info!("Telegram bot received shutdown signal");
+            tracing::info!("Telegram bot received shutdown signal");
         }
         _ = teloxide::repl(bot, move |bot: Bot, msg: Message| {
             let attachments = attachments.clone();
@@ -85,7 +84,7 @@ async fn run_telegram_bot(_bot: Bot, attachments: AttachmentQueue, mut shutdown_
                 handle_message(bot, msg, attachments).await
             }
         }) => {
-            info!("Telegram repl exited");
+            tracing::info!("Telegram repl exited");
         }
     }
 }
@@ -97,9 +96,9 @@ async fn handle_message(_bot: Bot, msg: Message, attachments: AttachmentQueue) -
 
             // print message text
             if let Some(text) = &msg.text() {
-                info!("Received message from user {}: {}", user_id, text);
+                tracing::info!("Received message from user {}: {}", user_id, text);
             } else {
-                info!("Received message from user {} with no text", user_id);
+                tracing::info!("Received message from user {} with no text", user_id);
             }
 
             // Rule for Kemono/Coomer URL - save to file instead of processing directly
@@ -109,7 +108,7 @@ async fn handle_message(_bot: Bot, msg: Message, attachments: AttachmentQueue) -
                     let url_str = url.as_str().to_string();
                     tokio::spawn(async move {
                         if let Err(e) = save_kemono_url_to_file(&url_str, "telegram").await {
-                            error!("Failed to save Kemono URL to file: {e}");
+                            tracing::error!("Failed to save Kemono URL to file: {e}");
                         }
                     });
                     return Ok(());
@@ -164,7 +163,7 @@ async fn run_attachment_cleanup(attachments: AttachmentQueue, mut shutdown_rx: w
     loop {
         tokio::select! {
             _ = shutdown_rx.changed() => {
-                info!("Attachment cleanup received shutdown signal");
+                tracing::info!("Attachment cleanup received shutdown signal");
                 break;
             }
             _ = sleep(Duration::from_secs(1)) => {
@@ -182,18 +181,18 @@ async fn run_attachment_cleanup(attachments: AttachmentQueue, mut shutdown_rx: w
                     let folder_final = format!("exchange/messages/{}_{}", user_id, timestamp);
 
                     if let Err(e) = create_dir_all(&folder_tmp) {
-                        error!("Failed to create tmp dir: {}", e);
+                        tracing::error!("Failed to create tmp dir: {}", e);
                         continue;
                     }
 
                     for item in queue {
                         if let Err(e) = download_and_save_file(&bot, &item.file_id, &folder_tmp).await {
-                            error!("Download failed: {}", e);
+                            tracing::error!("Download failed: {}", e);
                         }
                     }
 
                     if let Err(e) = rename(&folder_tmp, &folder_final) {
-                        error!("Failed to move directory: {}", e);
+                        tracing::error!("Failed to move directory: {}", e);
                     }
                 }
             }
@@ -209,7 +208,7 @@ async fn download_and_save_file(bot: &Bot, file_id: &str, folder: &str) -> Resul
         .map_err(|e| format!("get_file failed: {e}"))?;
     let token = std::env::var("TELOXIDE_TOKEN").map_err(|e| format!("env error: {e}"))?;
     let url = format!("https://api.telegram.org/file/bot{token}/{}", file.path);
-    info!("Fetching file from URL: {url}");
+    tracing::info!("Fetching file from URL: {url}");
 
     let content = reqwest::get(&url)
         .await
@@ -218,7 +217,7 @@ async fn download_and_save_file(bot: &Bot, file_id: &str, folder: &str) -> Resul
         .await
         .map_err(|e| format!("bytes failed: {e}"))?;
     let filename = format!("{folder}/{}", file.path.replace('/', "_"));
-    info!("Saving file to: {}", filename);
+    tracing::info!("Saving file to: {}", filename);
     let mut file = File::create(&filename).map_err(|e| format!("file create failed: {e}"))?;
     file.write_all(&content)
         .map_err(|e| format!("write failed: {e}"))?;
@@ -244,6 +243,6 @@ async fn save_kemono_url_to_file(
     let mut file = File::create(&filename)?;
     file.write_all(url.as_bytes())?;
 
-    info!("Saved Kemono URL to file: {}", filename);
+    tracing::info!("Saved Kemono URL to file: {}", filename);
     Ok(())
 }

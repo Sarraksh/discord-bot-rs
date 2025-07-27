@@ -1,4 +1,3 @@
-use tracing::{error, info, warn};
 use tokio::signal;
 use tokio::sync::watch;
 use std::time::Duration;
@@ -29,15 +28,15 @@ pub fn create_shutdown_signal() -> (watch::Sender<bool>, watch::Receiver<bool>) 
 
         tokio::select! {
             _ = ctrl_c => {
-                info!("Received SIGINT (Ctrl+C), initiating graceful shutdown");
+                tracing::info!("Received SIGINT (Ctrl+C), initiating graceful shutdown");
             },
             _ = terminate => {
-                info!("Received SIGTERM, initiating graceful shutdown");
+                tracing::info!("Received SIGTERM, initiating graceful shutdown");
             },
         }
 
         if let Err(_) = tx_clone.send(true) {
-            error!("Failed to send shutdown signal - receiver may have been dropped");
+            tracing::error!("Failed to send shutdown signal - receiver may have been dropped");
         }
     });
 
@@ -53,11 +52,11 @@ pub async fn wait_for_shutdown_with_timeout(
     
     match tokio::time::timeout(timeout, shutdown_future).await {
         Ok(_) => {
-            info!("Graceful shutdown completed successfully");
+            tracing::info!("Graceful shutdown completed successfully");
             true
         }
         Err(_) => {
-            error!("Shutdown timeout after {} seconds", timeout_secs);
+            tracing::error!("Shutdown timeout after {} seconds", timeout_secs);
             false
         }
     }
@@ -67,7 +66,7 @@ pub async fn wait_for_shutdown_with_timeout(
 pub async fn wait_for_tasks(tasks: Vec<tokio::task::JoinHandle<()>>) {
     for (i, task) in tasks.into_iter().enumerate() {
         if let Err(e) = task.await {
-            warn!("Task {} failed during shutdown: {}", i, e);
+            tracing::warn!("Task {} failed during shutdown: {}", i, e);
         }
     }
 }
@@ -97,7 +96,7 @@ impl ShutdownCoordinator {
     /// Manually trigger shutdown
     pub fn trigger_shutdown(&self) {
         if let Err(_) = self.shutdown_tx.send(true) {
-            error!("Failed to trigger shutdown - receiver may have been dropped");
+            tracing::error!("Failed to trigger shutdown - receiver may have been dropped");
         }
     }
 
@@ -112,11 +111,11 @@ impl ShutdownCoordinator {
         
         // Wait for shutdown signal
         if let Err(e) = shutdown_rx.changed().await {
-            error!("Error waiting for shutdown signal: {}", e);
+            tracing::error!("Error waiting for shutdown signal: {}", e);
             return false;
         }
 
-        info!("Shutdown signal received, coordinating graceful shutdown...");
+        tracing::info!("Shutdown signal received, coordinating graceful shutdown...");
 
         // Trigger shutdown for all components
         self.trigger_shutdown();
@@ -124,7 +123,7 @@ impl ShutdownCoordinator {
         // Wait for all tasks to complete
         let shutdown_future = async {
             wait_for_tasks(self.tasks).await;
-            info!("All tasks completed");
+            tracing::info!("All tasks completed");
         };
 
         wait_for_shutdown_with_timeout(shutdown_future, timeout_secs).await

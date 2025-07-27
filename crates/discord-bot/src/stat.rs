@@ -8,7 +8,6 @@ use std::{collections::HashMap, vec};
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
 use std::error::Error;
-use tracing::{info, warn};
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct Stat {
@@ -21,7 +20,7 @@ pub struct Stat {
 impl Stat {
     pub fn init_collection(&mut self) {
         self.collection_start = chrono::Utc::now().naive_utc();
-        info!("Now time is     : UTC {:?}", self.collection_start);
+        tracing::info!("Now time is     : UTC {:?}", self.collection_start);
         self.collect_until = next_update_time();
     }
 
@@ -137,7 +136,7 @@ impl MessageStat {
         }
 
         rows.iter().for_each(|row| {
-            info!("{}", row);
+            tracing::info!("{}", row);
         });
 
         Some(rows.join("\n"))
@@ -236,7 +235,7 @@ impl MessageStreakPersonalRecord {
 pub fn next_update_time() -> chrono::NaiveDateTime {
     // let next = next_update_time_min();
     let next = next_sunday_start_time();
-    info!("Next update time: UTC {:?}", next);
+    tracing::info!("Next update time: UTC {:?}", next);
     next
 }
 

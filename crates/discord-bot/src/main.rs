@@ -23,7 +23,6 @@ use std::env;
 use std::fs::{create_dir_all, File};
 use std::io::Write;
 use std::sync::Arc;
-use tracing::{error, info, warn};
 
 use chrono::Utc;
 use kc::KEMONO_COOMER_REGEX;
@@ -50,7 +49,7 @@ impl EventHandler for Handler {
 
         // Check for kemono URLs and save to file
         if let Err(e) = check_and_save_kemono_url(&msg).await {
-            error!("Error saving kemono URL: {}", e);
+            tracing::error!("Error saving kemono URL: {}", e);
         }
 
         if react_to_mention(&ctx, &msg, storage_guard.self_id, &conf).await {
@@ -76,7 +75,7 @@ impl EventHandler for Handler {
         let conf = config_guard.clone();
         drop(config_guard);
         let bot_name = get_user_name(&storage_guard.self_id, &ctx.http, &conf).await;
-        info!("{} is connected!", bot_name);
+        tracing::info!("{} is connected!", bot_name);
     }
 }
 
@@ -87,7 +86,7 @@ async fn main() {
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
 
-    info!("Starting Discord bot...");
+    tracing::info!("Starting Discord bot...");
 
     let stat_save_file = "stat/stat.json"; // TODO - move to config
 
@@ -134,10 +133,10 @@ async fn main() {
         let mut shutdown_rx = shutdown_rx_clone;
         tokio::select! {
             _ = watch_and_send_discord_folders(token, discord_channel_id) => {
-                warn!("File watcher exited unexpectedly");
+                tracing::warn!("File watcher exited unexpectedly");
             }
             _ = shutdown_rx.changed() => {
-                info!("File watcher shutting down gracefully");
+                tracing::info!("File watcher shutting down gracefully");
             }
         }
     });
@@ -151,22 +150,22 @@ async fn main() {
         tokio::select! {
             result = client.start() => {
                 if let Err(why) = result {
-                    error!("Discord client error: {:?}", why);
+                    tracing::error!("Discord client error: {:?}", why);
                 }
             }
             _ = shutdown_rx.changed() => {
-                info!("Discord client shutting down gracefully");
+                tracing::info!("Discord client shutting down gracefully");
                 
                 // Save statistics before shutdown
                 let stat_guard = arc_stat_clone.lock().await;
                 match stat_guard.save_to_file(stat_save_file) {
-                    Ok(_) => info!("Statistics saved to {}", stat_save_file),
-                    Err(e) => error!("Error saving statistics: {}", e),
+                    Ok(_) => tracing::info!("Statistics saved to {}", stat_save_file),
+                    Err(e) => tracing::error!("Error saving statistics: {}", e),
                 }
                 drop(stat_guard);
                 
                 // Shutdown Discord client
-                info!("Shutting down Discord shards...");
+                tracing::info!("Shutting down Discord shards...");
                 shard_manager.shutdown_all().await;
             }
         }
@@ -176,17 +175,17 @@ async fn main() {
     shutdown_coordinator.add_task(file_watcher_task);
     shutdown_coordinator.add_task(client_task);
 
-    info!("Discord bot is running. Press Ctrl+C to stop.");
+    tracing::info!("Discord bot is running. Press Ctrl+C to stop.");
 
     // Wait for shutdown with 15 second timeout
     let graceful = shutdown_coordinator.wait_for_shutdown(15).await;
     
     if !graceful {
-        error!("Forced shutdown due to timeout");
+        tracing::error!("Forced shutdown due to timeout");
         std::process::exit(1);
     }
 
-    info!("Discord bot shut down gracefully");
+    tracing::info!("Discord bot shut down gracefully");
 }
 
 async fn check_and_save_kemono_url(msg: &Message) -> Result<(), Box<dyn std::error::Error>> {
@@ -207,7 +206,7 @@ async fn check_and_save_kemono_url(msg: &Message) -> Result<(), Box<dyn std::err
         let mut file = File::create(&filename)?;
         file.write_all(url.as_bytes())?;
 
-        info!("Saved kemono URL to file: {}", filename);
+        tracing::info!("Saved kemono URL to file: {}", filename);
     }
 
     Ok(())

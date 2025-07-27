@@ -11,7 +11,6 @@ use teloxide::{
     types::{MediaAnimation, MediaDocument, MediaKind, MediaPhoto, MediaVideo, MessageKind},
 };
 use tokio::time::{sleep, Duration, Instant};
-use tracing::{error, info};
 
 struct Attachment {
     file_id: String,
@@ -19,7 +18,7 @@ struct Attachment {
 }
 
 pub async fn handle_telegram_photos() {
-    info!("Starting telegram bot...");
+    tracing::info!("Starting telegram bot...");
 
     let bot = Bot::from_env();
     let attachments: Arc<Mutex<Option<(VecDeque<Attachment>, Instant, UserId)>>> =
@@ -43,7 +42,7 @@ pub async fn handle_telegram_photos() {
                                 match kc::download_from_kemono_url(&url_str).await {
                                     Ok(_) => {}
                                     Err(e) => {
-                                        error!(
+                                        tracing::error!(
                                             "Failed to download from Kemono/Coomer URL: {e}"
                                         );
                                     }
@@ -115,7 +114,7 @@ pub async fn handle_telegram_photos() {
                                                 format!("exchange/messages/{}_{}", user_id, timestamp);
 
                                             if let Err(e) = create_dir_all(&folder_tmp) {
-                                                error!("Failed to create tmp dir: {}", e);
+                                                tracing::error!("Failed to create tmp dir: {}", e);
                                                 return;
                                             }
 
@@ -127,12 +126,12 @@ pub async fn handle_telegram_photos() {
                                                 )
                                                 .await
                                                 {
-                                                    error!("Download failed: {}", e);
+                                                    tracing::error!("Download failed: {}", e);
                                                 }
                                             }
 
                                             if let Err(e) = rename(&folder_tmp, &folder_final) {
-                                                error!("Failed to move directory: {}", e);
+                                                tracing::error!("Failed to move directory: {}", e);
                                             }
 
                                             break;
@@ -158,7 +157,7 @@ async fn download_and_save_file(bot: &Bot, file_id: &str, folder: &str) -> Resul
         .map_err(|e| format!("get_file failed: {e}"))?;
     let token = std::env::var("TELOXIDE_TOKEN").map_err(|e| format!("env error: {e}"))?;
     let url = format!("https://api.telegram.org/file/bot{token}/{}", file.path);
-    info!("Fetching file from URL: {url}");
+    tracing::info!("Fetching file from URL: {url}");
 
     let content = reqwest::get(&url)
         .await
@@ -167,7 +166,7 @@ async fn download_and_save_file(bot: &Bot, file_id: &str, folder: &str) -> Resul
         .await
         .map_err(|e| format!("bytes failed: {e}"))?;
     let filename = format!("{folder}/{}", file.path.replace('/', "_"));
-    info!("Saving file to: {}", filename);
+    tracing::info!("Saving file to: {}", filename);
     let mut file = File::create(&filename).map_err(|e| format!("file create failed: {e}"))?;
     file.write_all(&content)
         .map_err(|e| format!("write failed: {e}"))?;

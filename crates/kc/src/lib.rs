@@ -2,7 +2,6 @@ use serde::{Deserialize, Serialize};
 use std::{fs, path::Path};
 use tokio::time::Duration;
 use tokio::{fs::File, io::AsyncWriteExt};
-use tracing::{error, info, warn};
 use uuid::Uuid;
 
 /// A file or attachment
@@ -54,7 +53,7 @@ pub async fn download_post_files(
     }
 
     if files.is_empty() {
-        warn!("No supported attachments found.");
+        tracing::warn!("No supported attachments found.");
         return Err("No attachments to download".into());
     }
 
@@ -85,21 +84,21 @@ pub async fn download_post_files(
             .unwrap_or_default();
 
         if !ALLOWED_EXTENSIONS.contains(&ext.as_str()) {
-            warn!("Skipping unsupported file type: {}", file.name);
+            tracing::warn!("Skipping unsupported file type: {}", file.name);
             continue;
         }
 
         let sanitized_name = sanitize_filename(&file.name);
         let save_path = format!("{}/{file_number:0>3}_{}", tmp_dir, sanitized_name);
-        info!("Saving file: {}", save_path);
+        tracing::info!("Saving file: {}", save_path);
         if Path::new(&save_path).exists() {
-            info!("Skipping already downloaded: {}", save_path);
+            tracing::info!("Skipping already downloaded: {}", save_path);
             continue;
         }
 
         // TODO - fallback to file path without "data" ?
         let file_url = format!("https://{}/data{}", domain, file.path);
-        info!("Checking file: {}", file_url);
+        tracing::info!("Checking file: {}", file_url);
 
         let head = client.head(&file_url).send().await?;
         let content_len = head
@@ -110,7 +109,7 @@ pub async fn download_post_files(
 
         if let Some(size) = content_len {
             if size > MAX_FILE_SIZE {
-                info!(
+                tracing::info!(
                     "File too large ({} bytes), saving JSON link: {}",
                     size, sanitized_name
                 );
@@ -131,7 +130,7 @@ pub async fn download_post_files(
             }
         }
 
-        info!("Downloading: {}", file_url);
+        tracing::info!("Downloading: {}", file_url);
         let mut resp = client.get(&file_url).send().await?;
         let mut out = File::create(&save_path).await?;
         while let Some(chunk) = resp.chunk().await? {
@@ -142,11 +141,11 @@ pub async fn download_post_files(
     fs::create_dir_all("./exchange/messages")?;
     match fs::rename(&tmp_dir, &final_dir) {
         Ok(_) => {
-            info!("Moved to: {}", final_dir);
+            tracing::info!("Moved to: {}", final_dir);
             Ok(final_dir)
         }
         Err(e) => {
-            error!("Failed to move directory: {}", e);
+            tracing::error!("Failed to move directory: {}", e);
             Err(Box::new(e))
         }
     }
@@ -207,18 +206,18 @@ pub async fn start_kemono_ingest_loop(mut shutdown_signal: tokio::sync::watch::R
             match fetch_and_ingest_posts(artist).await {
                 Ok(Some(new_last_id)) => artist.last_ingested = Some(new_last_id),
                 Ok(None) => (),
-                Err(e) => error!("Error for {}: {}", artist.user_id, e),
+                Err(e) => tracing::error!("Error for {}: {}", artist.user_id, e),
             }
         }
 
         if let Err(e) = write_json(path, &artists) {
-            error!("Failed to write JSON: {}", e);
+            tracing::error!("Failed to write JSON: {}", e);
         }
 
         tokio::select! {
             _ = tokio::time::sleep(Duration::from_secs(3600)) => continue,
             _ = shutdown_signal.changed() => {
-                info!("Kemono loop shutdown triggered.");
+                tracing::info!("Kemono loop shutdown triggered.");
                 break;
             }
         }
@@ -254,7 +253,7 @@ async fn fetch_and_ingest_posts(
             "https://{}/{}/user/{}/post/{}",
             artist.domain, artist.platform, artist.user_id, post.id
         );
-        info!("Ingesting: {}", post_url);
+        tracing::info!("Ingesting: {}", post_url);
         let _ = download_from_kemono_url(&post_url).await;
     }
 
