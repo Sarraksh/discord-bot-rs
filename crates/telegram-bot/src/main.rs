@@ -1,4 +1,5 @@
 use chrono::Utc;
+use kc::KEMONO_COOMER_REGEX;
 use regex::Regex;
 use std::collections::VecDeque;
 use std::fs::{create_dir_all, rename, File};
@@ -43,10 +44,7 @@ async fn main() {
 
                     // Rule for Kemono/Coomer URL - save to file instead of processing directly
                     if let Some(text) = &msg.text() {
-                        let kemono_regex = Regex::new(
-                            r"https://(kemono\.cr|coomer\.st)/[^/]+/user/[[:alnum:]_]+/post/\d+",
-                        )
-                        .unwrap();
+                        let kemono_regex = Regex::new(KEMONO_COOMER_REGEX).unwrap();
                         if let Some(url) = kemono_regex.find(text) {
                             let url_str = url.as_str().to_string();
                             tokio::spawn(async move {

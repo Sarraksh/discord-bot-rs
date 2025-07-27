@@ -27,6 +27,8 @@ struct Post {
 
 const ALLOWED_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "mp4", "mov", "gif", "webp"];
 const MAX_FILE_SIZE: u64 = 50_000_000;
+pub const KEMONO_COOMER_REGEX: &str =
+    r"https://(kemono\.cr|coomer\.st)/[^/]+/user/[[:alnum:]_]+/post/\d+";
 
 pub async fn download_post_files(
     domain: &str,

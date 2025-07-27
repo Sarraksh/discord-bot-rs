@@ -24,6 +24,7 @@ use std::io::Write;
 use std::sync::Arc;
 
 use chrono::Utc;
+use kc::KEMONO_COOMER_REGEX;
 use regex::Regex;
 use serenity::client::Client;
 use serenity::model::gateway::GatewayIntents;
@@ -144,7 +145,7 @@ async fn main() {
 }
 
 async fn check_and_save_kemono_url(msg: &Message) -> Result<(), Box<dyn std::error::Error>> {
-    let kemono_regex = Regex::new(r"https://(kemono\.cr|coomer\.st)/[^/]+/user/[[:alnum:]_]+/post/\d+")?;
+    let kemono_regex = Regex::new(KEMONO_COOMER_REGEX)?;
 
     if let Some(url_match) = kemono_regex.find(&msg.content) {
         let url = url_match.as_str();
@@ -155,10 +156,7 @@ async fn check_and_save_kemono_url(msg: &Message) -> Result<(), Box<dyn std::err
         // Generate filename with timestamp, source, and UUID
         let timestamp = Utc::now().timestamp();
         let uuid = Uuid::new_v4();
-        let filename = format!(
-            "./kemono-links/{}_{}_{}.txt",
-            timestamp, "discord", uuid
-        );
+        let filename = format!("./kemono-links/{}_{}_{}.txt", timestamp, "discord", uuid);
 
         // Write URL to file
         let mut file = File::create(&filename)?;

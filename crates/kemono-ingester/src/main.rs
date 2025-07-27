@@ -1,4 +1,4 @@
-use kemono::{download_from_kemono_url, start_kemono_ingest_loop};
+use kc::{download_from_kemono_url, start_kemono_ingest_loop};
 use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
 use std::fs;
 use std::path::Path;
