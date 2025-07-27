@@ -1144,7 +1144,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "kemono-ingester"
+name = "kc-ingester"
 version = "0.1.0"
 dependencies = [
  "kc",

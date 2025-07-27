@@ -60,7 +60,7 @@ services:
     environment:
       <<: *common-environment
 
-  kemono-ingester:
+  kc-ingester:
     build:
       context: .
       dockerfile_inline: |
@@ -70,8 +70,8 @@ services:
             libssl3 \
             ca-certificates \
             && rm -rf /var/lib/apt/lists/*
-        CMD ["./bin/kemono-ingester"]
-    container_name: kemono-ingester
+        CMD ["./bin/kc-ingester"]
+    container_name: kc-ingester
     volumes:
       - ./.config:/app/.config:rw
       - ./bin:/app/bin:ro
