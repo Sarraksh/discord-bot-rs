@@ -110,9 +110,9 @@ pub async fn handle_telegram_photos() {
                                                 attachments_clone.lock().unwrap().take().unwrap();
                                             let timestamp = Utc::now().format("%Y%m%dT%H%M%S");
                                             let folder_tmp =
-                                                format!("messages_tmp/{}_{}", user_id, timestamp);
+                                                format!("exchange/messages_tmp/{}_{}", user_id, timestamp);
                                             let folder_final =
-                                                format!("messages/{}_{}", user_id, timestamp);
+                                                format!("exchange/messages/{}_{}", user_id, timestamp);
 
                                             if let Err(e) = create_dir_all(&folder_tmp) {
                                                 log::error!("Failed to create tmp dir: {}", e);

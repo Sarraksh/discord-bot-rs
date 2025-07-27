@@ -1,0 +1,74 @@
+services:
+  discord-bot:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM ubuntu:24.04
+        WORKDIR /app
+        RUN apt-get update && apt-get install -y \
+            libssl3 \
+            ca-certificates \
+            && rm -rf /var/lib/apt/lists/*
+        COPY ./bin/discord-bot /app/discord-bot
+        COPY ./run.sh /app/run.sh
+        RUN chmod +x /app/discord-bot
+        RUN chmod +x /app/run.sh
+        CMD ["./run.sh", "./discord-bot"]
+    container_name: discord-bot
+    volumes:
+      - ./.config:/app/.config:rw
+      - ./exchange:/app/exchange:rw
+      - ./stat:/app/stat:rw
+    restart: unless-stopped
+    networks:
+      - bot-network
+
+  telegram-bot:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM ubuntu:24.04
+        WORKDIR /app
+        RUN apt-get update && apt-get install -y \
+            libssl3 \
+            ca-certificates \
+            && rm -rf /var/lib/apt/lists/*
+        COPY ./bin/telegram-bot /app/telegram-bot
+        COPY ./run.sh /app/run.sh
+        RUN chmod +x /app/telegram-bot
+        RUN chmod +x /app/run.sh
+        CMD ["./run.sh", "./telegram-bot"]
+    container_name: telegram-bot
+    volumes:
+      - ./.config:/app/.config:rw
+      - ./exchange:/app/exchange:rw
+    restart: unless-stopped
+    networks:
+      - bot-network
+
+  kemono-ingester:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM ubuntu:24.04
+        WORKDIR /app
+        RUN apt-get update && apt-get install -y \
+            libssl3 \
+            ca-certificates \
+            && rm -rf /var/lib/apt/lists/*
+        COPY ./bin/kemono-ingester /app/kemono-ingester
+        COPY ./run.sh /app/run.sh
+        RUN chmod +x /app/kemono-ingester
+        RUN chmod +x /app/run.sh
+        CMD ["./run.sh", "./kemono-ingester"]
+    container_name: kemono-ingester
+    volumes:
+      - ./.config:/app/.config:rw
+      - ./exchange:/app/exchange:rw
+    restart: unless-stopped
+    networks:
+      - bot-network
+
+networks:
+  bot-network:
+    driver: bridge

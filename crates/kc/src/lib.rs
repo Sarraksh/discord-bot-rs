@@ -57,8 +57,8 @@ pub async fn download_post_files(
     }
 
     let uuid = Uuid::new_v4();
-    let tmp_dir = format!("./messages_tmp/{}", uuid);
-    let final_dir = format!("./messages/{}", uuid);
+    let tmp_dir = format!("./exchange/messages_tmp/{}", uuid);
+    let final_dir = format!("./exchange/messages/{}", uuid);
     fs::create_dir_all(&tmp_dir)?;
 
     // Save post content to post.txt
@@ -137,7 +137,7 @@ pub async fn download_post_files(
         }
     }
 
-    fs::create_dir_all("./messages")?;
+    fs::create_dir_all("./exchange/messages")?;
     match fs::rename(&tmp_dir, &final_dir) {
         Ok(_) => {
             println!("Moved to: {}", final_dir);

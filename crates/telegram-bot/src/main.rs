@@ -114,9 +114,9 @@ async fn main() {
                                                 attachments_clone.lock().unwrap().take().unwrap();
                                             let timestamp = Utc::now().format("%Y%m%dT%H%M%S");
                                             let folder_tmp =
-                                                format!("messages_tmp/{}_{}", user_id, timestamp);
+                                                format!("exchange/messages_tmp/{}_{}", user_id, timestamp);
                                             let folder_final =
-                                                format!("messages/{}_{}", user_id, timestamp);
+                                                format!("exchange/messages/{}_{}", user_id, timestamp);
 
                                             if let Err(e) = create_dir_all(&folder_tmp) {
                                                 log::error!("Failed to create tmp dir: {}", e);
@@ -183,13 +183,13 @@ async fn save_kemono_url_to_file(
     source: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Create kemono-links directory if it doesn't exist
-    create_dir_all("./kemono-links")?;
+    create_dir_all("./exchange/kc-links")?;
 
     // Generate filename with timestamp, source, and UUID
     let timestamp = Utc::now().timestamp();
     let uuid = Uuid::new_v4();
     let filename = format!(
-        "./kemono-links/{}_{}_{}_{}.txt",
+        "./exchange/kc-links/{}_{}_{}_{}.txt",
         timestamp, source, uuid, "url"
     );
 

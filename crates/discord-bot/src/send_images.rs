@@ -21,7 +21,7 @@ pub async fn watch_and_send_discord_folders(discord_token: String, channel_id: u
     let channel = ChannelId::new(channel_id);
 
     loop {
-        let entries = match fs::read_dir("messages") {
+        let entries = match fs::read_dir("exchange/messages") {
             Ok(entries) => entries,
             Err(_) => {
                 sleep(Duration::from_secs(10)).await;

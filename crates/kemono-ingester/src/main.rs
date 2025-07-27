@@ -6,13 +6,15 @@ use std::sync::mpsc;
 use std::time::Duration;
 use tokio::sync::watch;
 
+const KC_LINKS_DIR: &str = "./exchange/kc-links";
+
 #[tokio::main]
 async fn main() {
     println!("Starting Kemono/Coomer Ingester...");
 
-    // Create kemono-links directory if it doesn't exist
-    if let Err(e) = fs::create_dir_all("./kemono-links") {
-        eprintln!("Failed to create kemono-links directory: {}", e);
+    // Create kc directory if it doesn't exist
+    if let Err(e) = fs::create_dir_all(KC_LINKS_DIR) {
+        eprintln!("Failed to create kc directory: {}", e);
         return;
     }
 
@@ -46,7 +48,7 @@ async fn main() {
 }
 
 async fn monitor_kemono_links(shutdown_rx: watch::Receiver<bool>) {
-    println!("Starting kemono-links file monitor...");
+    println!("Starting kc file monitor...");
 
     let (tx, rx) = mpsc::channel();
 
@@ -66,9 +68,9 @@ async fn monitor_kemono_links(shutdown_rx: watch::Receiver<bool>) {
         }
     };
 
-    // Watch the kemono-links directory
-    if let Err(e) = watcher.watch(Path::new("./kemono-links"), RecursiveMode::NonRecursive) {
-        eprintln!("Failed to watch kemono-links directory: {}", e);
+    // Watch the kc directory
+    if let Err(e) = watcher.watch(Path::new(KC_LINKS_DIR), RecursiveMode::NonRecursive) {
+        eprintln!("Failed to watch kc directory: {}", e);
         return;
     }
 
@@ -105,7 +107,7 @@ async fn monitor_kemono_links(shutdown_rx: watch::Receiver<bool>) {
 }
 
 async fn process_existing_files() -> Result<(), Box<dyn std::error::Error>> {
-    let entries = fs::read_dir("./kemono-links")?;
+    let entries = fs::read_dir(KC_LINKS_DIR)?;
 
     for entry in entries.flatten() {
         let path = entry.path();

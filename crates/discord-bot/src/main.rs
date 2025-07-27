@@ -81,7 +81,7 @@ impl EventHandler for Handler {
 
 #[tokio::main]
 async fn main() {
-    let stat_save_file = "stat.json"; // TODO - move to config
+    let stat_save_file = "stat/stat.json"; // TODO - move to config
 
     // Set gateway intents, which decides what events the bot will be notified about
     let intents = GatewayIntents::GUILD_MESSAGES
@@ -150,13 +150,13 @@ async fn check_and_save_kemono_url(msg: &Message) -> Result<(), Box<dyn std::err
     if let Some(url_match) = kemono_regex.find(&msg.content) {
         let url = url_match.as_str();
 
-        // Create kemono-links directory if it doesn't exist
-        create_dir_all("./kemono-links")?;
+        // Create kc directory if it doesn't exist
+        create_dir_all("./exchange/kc-links")?;
 
         // Generate filename with timestamp, source, and UUID
         let timestamp = Utc::now().timestamp();
         let uuid = Uuid::new_v4();
-        let filename = format!("./kemono-links/{}_{}_{}.txt", timestamp, "discord", uuid);
+        let filename = format!("./exchange/kc-links/{}_{}_{}.txt", timestamp, "discord", uuid);
 
         // Write URL to file
         let mut file = File::create(&filename)?;

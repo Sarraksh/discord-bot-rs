@@ -8,13 +8,13 @@ ARCHIVE_NAME="discord-bot-package.tar"
 # Create a tar archive containing the whole .config directory, the discord-bot binary, and run.sh depending on the argument passed
 case $1 in
   cfg)
-    tar -czf $ARCHIVE_NAME .config run.sh
+    tar -czf $ARCHIVE_NAME .config run.sh docker-compose.yml
     ;;
   bin)
-    tar -czf $ARCHIVE_NAME -C target/debug discord-bot telegram-bot kemono-ingester
+    tar -czf $ARCHIVE_NAME --transform 's,^,bin/,' -C target/debug discord-bot telegram-bot kemono-ingester
     ;;
   full)
-    tar -czf $ARCHIVE_NAME .config run.sh -C target/debug discord-bot telegram-bot kemono-ingester
+    tar -czf $ARCHIVE_NAME .config run.sh docker-compose.yml --transform 's,^,bin/,' -C target/debug discord-bot telegram-bot kemono-ingester
     ;;
   *)
     echo "Usage: $0 {cfg|bin|full}"
