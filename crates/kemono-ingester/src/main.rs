@@ -1,54 +1,65 @@
 use kc::{download_from_kemono_url, start_kemono_ingest_loop};
 use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
+use shutdown_utils::ShutdownCoordinator;
 use std::fs;
 use std::path::Path;
 use std::sync::mpsc;
 use std::time::Duration;
 use tokio::sync::watch;
+use tracing::{error, info, warn};
 
 const KC_LINKS_DIR: &str = "./exchange/kc-links";
 
 #[tokio::main]
 async fn main() {
-    println!("Starting Kemono/Coomer Ingester...");
+    // Initialize tracing
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
+
+    info!("Starting Kemono/Coomer Ingester...");
 
     // Create kc directory if it doesn't exist
     if let Err(e) = fs::create_dir_all(KC_LINKS_DIR) {
-        eprintln!("Failed to create kc directory: {}", e);
+        error!("Failed to create kc directory: {}", e);
         return;
     }
 
-    // Set up graceful shutdown
-    let (shutdown_tx, shutdown_rx) = watch::channel::<bool>(false);
+    // Create shutdown coordinator
+    let mut shutdown_coordinator = ShutdownCoordinator::new();
+    let shutdown_rx = shutdown_coordinator.subscribe();
 
     // Spawn periodic artist ingestion loop
     let shutdown_rx_clone = shutdown_rx.clone();
-    let artist_loop_handle = tokio::spawn(async move {
+    let artist_loop_task = tokio::spawn(async move {
         start_kemono_ingest_loop(shutdown_rx_clone).await;
     });
 
     // Spawn URL file monitoring task
     let shutdown_rx_clone = shutdown_rx.clone();
-    let file_monitor_handle = tokio::spawn(async move {
+    let file_monitor_task = tokio::spawn(async move {
         monitor_kemono_links(shutdown_rx_clone).await;
     });
 
-    // Set up Ctrl+C handler
-    tokio::spawn(async move {
-        tokio::signal::ctrl_c()
-            .await
-            .expect("Failed to listen for Ctrl+C");
-        println!("Received Ctrl+C, shutting down kemono/coomer ingester...");
-        shutdown_tx.send(true).ok();
-    });
+    // Add tasks to coordinator
+    shutdown_coordinator.add_task(artist_loop_task);
+    shutdown_coordinator.add_task(file_monitor_task);
 
-    // Wait for tasks to complete
-    let _ = tokio::try_join!(artist_loop_handle, file_monitor_handle);
-    println!("Kemono/Coomer Ingester shut down gracefully.");
+    info!("Kemono/Coomer Ingester is running. Press Ctrl+C to stop.");
+
+    // Wait for shutdown with 15 second timeout
+    let graceful = shutdown_coordinator.wait_for_shutdown(15).await;
+    
+    if !graceful {
+        error!("Forced shutdown due to timeout");
+        std::process::exit(1);
+    }
+
+    info!("Kemono/Coomer Ingester shut down gracefully");
 }
 
 async fn monitor_kemono_links(shutdown_rx: watch::Receiver<bool>) {
-    println!("Starting kc file monitor...");
+    info!("Starting file monitor for kemono links...");
 
     let (tx, rx) = mpsc::channel();
 
@@ -63,25 +74,26 @@ async fn monitor_kemono_links(shutdown_rx: watch::Receiver<bool>) {
     ) {
         Ok(w) => w,
         Err(e) => {
-            eprintln!("Failed to create file watcher: {}", e);
+            error!("Failed to create file watcher: {}", e);
             return;
         }
     };
 
     // Watch the kc directory
     if let Err(e) = watcher.watch(Path::new(KC_LINKS_DIR), RecursiveMode::NonRecursive) {
-        eprintln!("Failed to watch kc directory: {}", e);
+        error!("Failed to watch kc directory: {}", e);
         return;
     }
 
     // Process existing files on startup
     if let Err(e) = process_existing_files().await {
-        eprintln!("Error processing existing files: {}", e);
+        error!("Error processing existing files: {}", e);
     }
 
     loop {
         // Check for shutdown signal
         if *shutdown_rx.borrow() {
+            info!("File monitor received shutdown signal");
             break;
         }
 
@@ -89,7 +101,7 @@ async fn monitor_kemono_links(shutdown_rx: watch::Receiver<bool>) {
         match rx.recv_timeout(Duration::from_millis(100)) {
             Ok(event) => {
                 if let Err(e) = handle_file_event(event).await {
-                    eprintln!("Error handling file event: {}", e);
+                    error!("Error handling file event: {}", e);
                 }
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {
@@ -97,23 +109,26 @@ async fn monitor_kemono_links(shutdown_rx: watch::Receiver<bool>) {
                 continue;
             }
             Err(mpsc::RecvTimeoutError::Disconnected) => {
-                eprintln!("File watcher disconnected");
+                error!("File watcher disconnected");
                 break;
             }
         }
     }
 
-    println!("File monitor stopped.");
+    info!("File monitor stopped");
 }
 
 async fn process_existing_files() -> Result<(), Box<dyn std::error::Error>> {
+    info!("Processing existing kemono URL files...");
     let entries = fs::read_dir(KC_LINKS_DIR)?;
 
-    for entry in entries.flatten() {
+    for entry in entries {
+        let entry = entry?;
         let path = entry.path();
+        
         if path.is_file() && path.extension().map_or(false, |ext| ext == "txt") {
             if let Err(e) = process_kemono_url_file(&path).await {
-                eprintln!("Error processing existing file {:?}: {}", path, e);
+                error!("Error processing existing file {:?}: {}", path, e);
             }
         }
     }
@@ -132,7 +147,7 @@ async fn handle_file_event(event: Event) -> Result<(), Box<dyn std::error::Error
                     tokio::time::sleep(Duration::from_millis(100)).await;
 
                     if let Err(e) = process_kemono_url_file(&path).await {
-                        eprintln!("Error processing file {:?}: {}", path, e);
+                        error!("Error processing file {:?}: {}", path, e);
                     }
                 }
             }
@@ -146,35 +161,35 @@ async fn handle_file_event(event: Event) -> Result<(), Box<dyn std::error::Error
 }
 
 async fn process_kemono_url_file(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    println!("Processing kemono URL file: {:?}", path);
+    info!("Processing kemono URL file: {:?}", path);
 
     // Read URL from file
     let url = fs::read_to_string(path)?.trim().to_string();
 
     if url.is_empty() {
-        println!("Empty URL file, skipping: {:?}", path);
+        info!("Empty URL file, skipping: {:?}", path);
         fs::remove_file(path)?;
         return Ok(());
     }
 
     // Validate URL format
     if !url.starts_with("https://kemono.cr/") && !url.starts_with("https://coomer.st/") {
-        eprintln!("Invalid kemono/coomer URL format: {}", url);
+        warn!("Invalid kemono/coomer URL format: {}", url);
         fs::remove_file(path)?;
         return Ok(());
     }
 
-    println!("Processing kemono/coomer URL: {}", url);
+    info!("Processing kemono/coomer URL: {}", url);
 
     // Download content using kemono library
     match download_from_kemono_url(&url).await {
         Ok(download_path) => {
-            println!("Successfully downloaded to: {}", download_path);
+            info!("Successfully downloaded to: {}", download_path);
             // Delete the processed URL file
             fs::remove_file(path)?;
         }
         Err(e) => {
-            eprintln!("Failed to download from kemono URL {}: {}", url, e);
+            error!("Failed to download from kemono URL {}: {}", url, e);
             // Still delete the file to avoid reprocessing
             fs::remove_file(path)?;
         }

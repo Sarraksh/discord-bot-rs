@@ -14,7 +14,7 @@ case $1 in
     tar -czf $ARCHIVE_NAME --transform 's,^,bin/,' -C target/debug discord-bot telegram-bot kemono-ingester
     ;;
   full)
-    tar -czf $ARCHIVE_NAME .config run.sh docker-compose.yml --transform 's,^,bin/,' -C target/debug discord-bot telegram-bot kemono-ingester
+    tar -czf $ARCHIVE_NAME .config run.sh docker-compose.yml --transform 's,^target/debug/,bin/,' target/debug/discord-bot target/debug/telegram-bot target/debug/kemono-ingester
     ;;
   *)
     echo "Usage: $0 {cfg|bin|full}"

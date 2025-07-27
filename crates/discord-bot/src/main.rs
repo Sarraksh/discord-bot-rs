@@ -18,17 +18,18 @@ use serenity::async_trait;
 use serenity::model::channel::Message;
 use serenity::model::gateway::Ready;
 use serenity::prelude::*;
+use shutdown_utils::ShutdownCoordinator;
 use std::env;
 use std::fs::{create_dir_all, File};
 use std::io::Write;
 use std::sync::Arc;
+use tracing::{error, info, warn};
 
 use chrono::Utc;
 use kc::KEMONO_COOMER_REGEX;
 use regex::Regex;
 use serenity::client::Client;
 use serenity::model::gateway::GatewayIntents;
-use tokio::signal;
 use uuid::Uuid;
 
 struct Handler {
@@ -49,7 +50,7 @@ impl EventHandler for Handler {
 
         // Check for kemono URLs and save to file
         if let Err(e) = check_and_save_kemono_url(&msg).await {
-            eprintln!("Error saving kemono URL: {}", e);
+            error!("Error saving kemono URL: {}", e);
         }
 
         if react_to_mention(&ctx, &msg, storage_guard.self_id, &conf).await {
@@ -75,12 +76,19 @@ impl EventHandler for Handler {
         let conf = config_guard.clone();
         drop(config_guard);
         let bot_name = get_user_name(&storage_guard.self_id, &ctx.http, &conf).await;
-        println!("{} is connected!", bot_name);
+        info!("{} is connected!", bot_name);
     }
 }
 
 #[tokio::main]
 async fn main() {
+    // Initialize tracing
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
+
+    info!("Starting Discord bot...");
+
     let stat_save_file = "stat/stat.json"; // TODO - move to config
 
     // Set gateway intents, which decides what events the bot will be notified about
@@ -92,8 +100,12 @@ async fn main() {
     let arc_stat = Arc::new(Mutex::new(stat));
     let config = init_config();
     let arc_config = Arc::new(Mutex::new(config.clone()));
-    // Create a new instance of the Client, logging in as a bot. This will automatically prepend
-    // your bot token with "Bot ", which is a requirement by Discord for bot users.
+    
+    // Create shutdown coordinator
+    let mut shutdown_coordinator = ShutdownCoordinator::new();
+    let shutdown_rx = shutdown_coordinator.subscribe();
+
+    // Create a new instance of the Client, logging in as a bot
     let token = config.token.clone();
     let mut client = Client::builder(&token, intents)
         .event_handler(Handler {
@@ -102,11 +114,9 @@ async fn main() {
             config: arc_config.clone(),
         })
         .await
-        .expect("Err creating client");
+        .expect("Failed to create Discord client");
 
-    stat_reporter(client.http.clone(), arc_stat.clone(), config);
-
-    // Clone the shard manager to use for graceful shutdown.
+    // Clone the shard manager for graceful shutdown
     let shard_manager = client.shard_manager.clone();
 
     // Get Discord channel ID from environment variable
@@ -115,33 +125,68 @@ async fn main() {
         .parse()
         .expect("DISCORD_CHANNEL_ID must be a valid u64");
 
-    // Spawn file watcher task
-    tokio::spawn(watch_and_send_discord_folders(token, discord_channel_id));
+    // Start the stat reporter
+    stat_reporter(client.http.clone(), arc_stat.clone(), config);
 
-    println!("Starting Discord bot...");
-
-    // Spawn a task to listen for Ctrl+C and then shut down gracefully.
-    let arc_stat_clone = arc_stat.clone();
-    tokio::spawn(async move {
-        signal::ctrl_c().await.expect("Failed to listen for Ctrl+C");
-        println!("Received Ctrl+C, initiating shutdown...");
-
-        let stat_guard = arc_stat_clone.lock().await;
-        match stat_guard.save_to_file(stat_save_file) {
-            Ok(_) => println!("State saved to {stat_save_file}"),
-            Err(e) => eprintln!("Error saving stat: {}", e),
+    // Spawn file watcher task with shutdown handling
+    let shutdown_rx_clone = shutdown_rx.clone();
+    let file_watcher_task = tokio::spawn(async move {
+        let mut shutdown_rx = shutdown_rx_clone;
+        tokio::select! {
+            _ = watch_and_send_discord_folders(token, discord_channel_id) => {
+                warn!("File watcher exited unexpectedly");
+            }
+            _ = shutdown_rx.changed() => {
+                info!("File watcher shutting down gracefully");
+            }
         }
-
-        shard_manager.shutdown_all().await;
     });
 
-    // Finally, start a single shard, and start listening to events.
-    //
-    // Shards will automatically attempt to reconnect, and will perform exponential backoff until
-    // it reconnects.
-    if let Err(why) = client.start().await {
-        println!("Client error: {why:?}");
+    // Spawn Discord client task with shutdown handling
+    let shutdown_rx_clone = shutdown_rx.clone();
+    let arc_stat_clone = arc_stat.clone();
+    let client_task = tokio::spawn(async move {
+        let mut shutdown_rx = shutdown_rx_clone;
+        
+        tokio::select! {
+            result = client.start() => {
+                if let Err(why) = result {
+                    error!("Discord client error: {:?}", why);
+                }
+            }
+            _ = shutdown_rx.changed() => {
+                info!("Discord client shutting down gracefully");
+                
+                // Save statistics before shutdown
+                let stat_guard = arc_stat_clone.lock().await;
+                match stat_guard.save_to_file(stat_save_file) {
+                    Ok(_) => info!("Statistics saved to {}", stat_save_file),
+                    Err(e) => error!("Error saving statistics: {}", e),
+                }
+                drop(stat_guard);
+                
+                // Shutdown Discord client
+                info!("Shutting down Discord shards...");
+                shard_manager.shutdown_all().await;
+            }
+        }
+    });
+
+    // Add tasks to coordinator
+    shutdown_coordinator.add_task(file_watcher_task);
+    shutdown_coordinator.add_task(client_task);
+
+    info!("Discord bot is running. Press Ctrl+C to stop.");
+
+    // Wait for shutdown with 15 second timeout
+    let graceful = shutdown_coordinator.wait_for_shutdown(15).await;
+    
+    if !graceful {
+        error!("Forced shutdown due to timeout");
+        std::process::exit(1);
     }
+
+    info!("Discord bot shut down gracefully");
 }
 
 async fn check_and_save_kemono_url(msg: &Message) -> Result<(), Box<dyn std::error::Error>> {
@@ -162,7 +207,7 @@ async fn check_and_save_kemono_url(msg: &Message) -> Result<(), Box<dyn std::err
         let mut file = File::create(&filename)?;
         file.write_all(url.as_bytes())?;
 
-        println!("Saved kemono URL to file: {}", filename);
+        info!("Saved kemono URL to file: {}", filename);
     }
 
     Ok(())
