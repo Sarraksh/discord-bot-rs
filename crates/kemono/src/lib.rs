@@ -93,7 +93,8 @@ pub async fn download_post_files(
             continue;
         }
 
-        let file_url = format!("https://{}{}", domain, file.path);
+        // TODO - fallback to file path without "data" ?
+        let file_url = format!("https://{}/data{}", domain, file.path);
         println!("Checking file: {}", file_url);
 
         let head = client.head(&file_url).send().await?;
@@ -149,14 +150,14 @@ pub async fn download_post_files(
 
 /// Parses the Kemono or Coomer post URL and calls the API download function
 pub async fn download_from_kemono_url(url: &str) -> Result<String, Box<dyn std::error::Error>> {
-    // Example: https://kemono.su/patreon/user/82530106/post/128244687
-    // Example: https://coomer.su/onlyfans/user/12345/post/67890
-    let (domain, path) = if url.starts_with("https://kemono.su/") {
-        ("kemono.su", url.trim_start_matches("https://kemono.su/"))
-    } else if url.starts_with("https://coomer.su/") {
-        ("coomer.su", url.trim_start_matches("https://coomer.su/"))
+    // Example: https://kemono.cr/patreon/user/82530106/post/128244687
+    // Example: https://coomer.st/onlyfans/user/12345/post/67890
+    let (domain, path) = if url.starts_with("https://kemono.cr/") {
+        ("kemono.cr", url.trim_start_matches("https://kemono.cr/"))
+    } else if url.starts_with("https://coomer.st/") {
+        ("coomer.st", url.trim_start_matches("https://coomer.st/"))
     } else {
-        return Err("Invalid URL format. Must be kemono.su or coomer.su".into());
+        return Err("Invalid URL format. Must be kemono.cr or coomer.st".into());
     };
 
     let parts: Vec<&str> = path.trim_end_matches('/').split('/').collect();

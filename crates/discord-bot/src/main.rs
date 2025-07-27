@@ -144,7 +144,7 @@ async fn main() {
 }
 
 async fn check_and_save_kemono_url(msg: &Message) -> Result<(), Box<dyn std::error::Error>> {
-    let kemono_regex = Regex::new(r"https://kemono\.su/[^/]+/user/\d+/post/\d+")?;
+    let kemono_regex = Regex::new(r"https://(kemono\.cr|coomer\.st)/[^/]+/user/[[:alnum:]_]+/post/\d+")?;
 
     if let Some(url_match) = kemono_regex.find(&msg.content) {
         let url = url_match.as_str();

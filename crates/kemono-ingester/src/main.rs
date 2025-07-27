@@ -8,7 +8,7 @@ use tokio::sync::watch;
 
 #[tokio::main]
 async fn main() {
-    println!("Starting Kemono Ingester...");
+    println!("Starting Kemono/Coomer Ingester...");
 
     // Create kemono-links directory if it doesn't exist
     if let Err(e) = fs::create_dir_all("./kemono-links") {
@@ -26,9 +26,9 @@ async fn main() {
     });
 
     // Spawn URL file monitoring task
-    let shutdown_tx_clone = shutdown_tx.clone();
+    let shutdown_rx_clone = shutdown_rx.clone();
     let file_monitor_handle = tokio::spawn(async move {
-        monitor_kemono_links(shutdown_tx_clone).await;
+        monitor_kemono_links(shutdown_rx_clone).await;
     });
 
     // Set up Ctrl+C handler
@@ -36,16 +36,16 @@ async fn main() {
         tokio::signal::ctrl_c()
             .await
             .expect("Failed to listen for Ctrl+C");
-        println!("Received Ctrl+C, shutting down kemono ingester...");
+        println!("Received Ctrl+C, shutting down kemono/coomer ingester...");
         shutdown_tx.send(true).ok();
     });
 
     // Wait for tasks to complete
     let _ = tokio::try_join!(artist_loop_handle, file_monitor_handle);
-    println!("Kemono Ingester shut down gracefully.");
+    println!("Kemono/Coomer Ingester shut down gracefully.");
 }
 
-async fn monitor_kemono_links(shutdown_tx: watch::Sender<bool>) {
+async fn monitor_kemono_links(shutdown_rx: watch::Receiver<bool>) {
     println!("Starting kemono-links file monitor...");
 
     let (tx, rx) = mpsc::channel();
@@ -79,7 +79,7 @@ async fn monitor_kemono_links(shutdown_tx: watch::Sender<bool>) {
 
     loop {
         // Check for shutdown signal
-        if *shutdown_tx.borrow() {
+        if *shutdown_rx.borrow() {
             break;
         }
 
@@ -156,13 +156,13 @@ async fn process_kemono_url_file(path: &Path) -> Result<(), Box<dyn std::error::
     }
 
     // Validate URL format
-    if !url.starts_with("https://kemono.su/") {
-        eprintln!("Invalid kemono URL format: {}", url);
+    if !url.starts_with("https://kemono.cr/") && !url.starts_with("https://coomer.st/") {
+        eprintln!("Invalid kemono/coomer URL format: {}", url);
         fs::remove_file(path)?;
         return Ok(());
     }
 
-    println!("Processing kemono URL: {}", url);
+    println!("Processing kemono/coomer URL: {}", url);
 
     // Download content using kemono library
     match download_from_kemono_url(&url).await {

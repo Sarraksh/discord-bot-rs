@@ -34,10 +34,19 @@ async fn main() {
                 if let Some(user) = &msg.from {
                     let user_id = user.id;
 
-                    // Rule for Kemono URL - save to file instead of processing directly
+                    // print message text
                     if let Some(text) = &msg.text() {
-                        let kemono_regex =
-                            Regex::new(r"https://kemono\.su/[^/]+/user/\d+/post/\d+").unwrap();
+                        println!("Received message from user {}: {}", user_id, text);
+                    } else {
+                        println!("Received message from user {} with no text", user_id);
+                    }
+
+                    // Rule for Kemono/Coomer URL - save to file instead of processing directly
+                    if let Some(text) = &msg.text() {
+                        let kemono_regex = Regex::new(
+                            r"https://(kemono\.cr|coomer\.st)/[^/]+/user/[[:alnum:]_]+/post/\d+",
+                        )
+                        .unwrap();
                         if let Some(url) = kemono_regex.find(text) {
                             let url_str = url.as_str().to_string();
                             tokio::spawn(async move {

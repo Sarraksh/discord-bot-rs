@@ -36,7 +36,7 @@ pub async fn handle_telegram_photos() {
                     // Rule for Kemono/Coomer URL
                     if let Some(text) = &msg.text() {
                         let site_regex =
-                            Regex::new(r"https://(kemono|coomer)\.su/[^/]+/user/\d+/post/\d+")
+                            Regex::new(r"https://(kemono\.cr|coomer\.st)/[^/]+/user/[[:alnum:]_]+/post/\d+")
                                 .unwrap();
                         if let Some(url) = site_regex.find(text) {
                             let url_str = url.as_str().to_string();
