@@ -46,6 +46,9 @@ pub async fn watch_and_send_discord_folders(discord_token: String, channel_id: u
             let mut media_files = vec![];
             let mut url_json_files = vec![];
             let mut title_text: Option<String> = None;
+            let mut artist_name: Option<String> = None;
+            let mut artist_url: Option<String> = None;
+            let mut post_url: Option<String> = None;
             // let mut post_text: Option<String> = None;
 
             if let Ok(files) = fs::read_dir(&path) {
@@ -70,6 +73,9 @@ pub async fn watch_and_send_discord_folders(discord_token: String, channel_id: u
                             let content = fs::read_to_string(&fpath).unwrap_or_default();
                             match name.as_str() {
                                 "title" => title_text = Some(content.trim().to_string()),
+                                "artist_name" => artist_name = Some(content.trim().to_string()),
+                                "artist_url" => artist_url = Some(content.trim().to_string()),
+                                "post_url" => post_url = Some(content.trim().to_string()),
                                 // "post" => post_text = Some(content.trim().to_string()),
                                 _ => {}
                             }
@@ -118,6 +124,18 @@ pub async fn watch_and_send_discord_folders(discord_token: String, channel_id: u
 
             // Construct the text part
             let mut message_content = String::new();
+            if let Some(name) = &artist_name {
+                let cleaned_name = clean_text_field(name);
+                if !cleaned_name.is_empty() {
+                    message_content.push_str(&format!("[{}]({})\n", cleaned_name, artist_url.unwrap_or_default()));
+                }
+            }
+            if let Some(url) = &post_url {
+                let cleaned_url = clean_text_field(url);
+                if !cleaned_url.is_empty() {
+                    message_content.push_str(&format!("[Post]({}): ", cleaned_url));
+                }
+            }
             if let Some(title) = &title_text {
                 let cleaned_title = clean_text_field(title);
                 if !cleaned_title.is_empty() {

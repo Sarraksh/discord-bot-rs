@@ -4,6 +4,9 @@ use tokio::time::Duration;
 use tokio::{fs::File, io::AsyncWriteExt};
 use uuid::Uuid;
 
+// https://kemono.cr/documentation/api/
+// https://coomer.st/documentation/api/
+
 /// A file or attachment
 #[derive(Debug, Deserialize)]
 struct FileEntry {
@@ -29,6 +32,32 @@ const ALLOWED_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "mp4", "mov", "gif",
 const MAX_FILE_SIZE: u64 = 50_000_000;
 pub const KEMONO_COOMER_REGEX: &str =
     r"https://(kemono\.cr|coomer\.st)/[^/]+/user/[[:alnum:]_]+/post/\d+";
+
+#[derive(Debug, Deserialize)]
+pub struct ArtistProfile {
+    pub id: String,
+    pub name: String,
+    pub service: String,
+    pub indexed: String,
+    pub updated: String,
+    pub public_id: String,
+    // pub relation_id: Option<usize>,
+    // pub has_chats: bool,
+}
+
+pub async fn get_user_by_id(
+    domain: &str,
+    service: &str,
+    user_id: &str,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let url = format!(
+        "https://{}/api/v1/{}/user/{}/profile",
+        domain, service, user_id
+    );
+    let client = reqwest::Client::new();
+    let response: ArtistProfile = client.get(&url).send().await?.json().await?;
+    Ok(response.name)
+}
 
 pub async fn download_post_files(
     domain: &str,
@@ -61,6 +90,24 @@ pub async fn download_post_files(
     let tmp_dir = format!("./exchange/messages_tmp/{}", uuid);
     let final_dir = format!("./exchange/messages/{}", uuid);
     fs::create_dir_all(&tmp_dir)?;
+
+    // Save artist name
+    let artist_name = get_user_by_id(domain, service, user_id).await?;
+    let artist_name_path = format!("{}/artist_name.txt", tmp_dir);
+    fs::write(&artist_name_path, artist_name)?;
+
+    // Save artist URL
+    let artist_url_path = format!("{}/artist_url.txt", tmp_dir);
+    let artist_url = format!("https://{}/{}/user/{}", domain, service, user_id);
+    fs::write(&artist_url_path, artist_url)?;
+
+    // Save post URL
+    let post_url_path = format!("{}/post_url.txt", tmp_dir);
+    let post_url = format!(
+        "https://{}/{}/user/{}/post/{}",
+        domain, service, user_id, post_id
+    );
+    fs::write(&post_url_path, post_url)?;
 
     // Save post content to post.txt
     let post_text_path = format!("{}/post.txt", tmp_dir);
@@ -111,7 +158,8 @@ pub async fn download_post_files(
             if size > MAX_FILE_SIZE {
                 tracing::info!(
                     "File too large ({} bytes), saving JSON link: {}",
-                    size, sanitized_name
+                    size,
+                    sanitized_name
                 );
                 let url_path = format!(
                     "{}/{}.url.json",
@@ -198,11 +246,25 @@ struct PostSummary {
 }
 
 pub async fn start_kemono_ingest_loop(mut shutdown_signal: tokio::sync::watch::Receiver<bool>) {
-    let path = "./kemono-artists.json";
-    let mut artists: Vec<ArtistEntry> = read_json(path).unwrap_or_default();
+    tracing::info!("Starting Kemono/Coomer ingestion loop...");
+    let artist_list_file_path = "./kc/kc-artists.json";
+
+    let mut artists: Vec<ArtistEntry> = if Path::new(artist_list_file_path).exists() {
+        match read_json(artist_list_file_path) {
+            Ok(artists) => artists,
+            Err(e) => {
+                tracing::error!("Artist list file exists but cannot be read: {}", e);
+                return;
+            }
+        }
+    } else {
+        Vec::new()
+    };
 
     loop {
+        tracing::info!("Ingesting {} artists", artists.len());
         for artist in &mut artists {
+            tracing::info!("Processing artist: {:?}", artist);
             match fetch_and_ingest_posts(artist).await {
                 Ok(Some(new_last_id)) => artist.last_ingested = Some(new_last_id),
                 Ok(None) => (),
@@ -210,14 +272,14 @@ pub async fn start_kemono_ingest_loop(mut shutdown_signal: tokio::sync::watch::R
             }
         }
 
-        if let Err(e) = write_json(path, &artists) {
+        if let Err(e) = write_json(artist_list_file_path, &artists) {
             tracing::error!("Failed to write JSON: {}", e);
         }
 
         tokio::select! {
             _ = tokio::time::sleep(Duration::from_secs(3600)) => continue,
             _ = shutdown_signal.changed() => {
-                tracing::info!("Kemono loop shutdown triggered.");
+                tracing::info!("Kemono coomer loop shutdown triggered.");
                 break;
             }
         }
@@ -227,13 +289,32 @@ pub async fn start_kemono_ingest_loop(mut shutdown_signal: tokio::sync::watch::R
 async fn fetch_and_ingest_posts(
     artist: &ArtistEntry,
 ) -> Result<Option<String>, Box<dyn std::error::Error>> {
+    tracing::info!("Fetching posts for artist: {:?}", artist);
     let url = format!(
         "https://{}/api/v1/{}/user/{}",
         artist.domain, artist.platform, artist.user_id
     );
-    let posts: Vec<PostSummary> = reqwest::get(&url).await?.json().await?;
-    // TODO - implement sorting by date for now rely to order from response
 
+    // Step 1: Send HTTP request
+    tracing::debug!("Making request to: {}", url);
+    let response = reqwest::get(&url).await?;
+
+    // Step 2: Check response status
+    let status = response.status();
+    if !status.is_success() {
+        return Err(format!("API request failed with status: {}", status).into());
+    }
+
+    // Step 3: Get response text
+    let response_text = response.text().await?;
+    tracing::debug!("Received {} bytes of data", response_text.len());
+
+    // Step 4: Parse JSON
+    let posts: Vec<PostSummary> = serde_json::from_str(&response_text)
+        .map_err(|e| format!("Failed to parse JSON response: {}", e))?;
+
+    // TODO - implement sorting by date for now rely to order from response
+    tracing::info!("Found {} posts for artist {}", posts.len(), artist.user_id);
     if posts.is_empty() {
         return Ok(None);
     }
@@ -244,6 +325,7 @@ async fn fetch_and_ingest_posts(
         posts.iter().take(10).collect()
     };
 
+    tracing::info!("New posts to ingest: {}", new_posts.len());
     if new_posts.is_empty() {
         return Ok(None);
     }

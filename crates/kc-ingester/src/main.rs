@@ -48,7 +48,7 @@ async fn main() {
 
     // Wait for shutdown with 15 second timeout
     let graceful = shutdown_coordinator.wait_for_shutdown(15).await;
-    
+
     if !graceful {
         tracing::error!("Forced shutdown due to timeout");
         std::process::exit(1);
@@ -124,8 +124,9 @@ async fn process_existing_files() -> Result<(), Box<dyn std::error::Error>> {
     for entry in entries {
         let entry = entry?;
         let path = entry.path();
-        
-        if path.is_file() && path.extension().map_or(false, |ext| ext == "txt") {
+
+        // if path.is_file() && path.extension().map_or(false, |ext| ext == "txt") {
+        if path.is_file() && path.extension().is_some_and(|ext| ext == "txt") {
             if let Err(e) = process_kemono_url_file(&path).await {
                 tracing::error!("Error processing existing file {:?}: {}", path, e);
             }
@@ -141,7 +142,8 @@ async fn handle_file_event(event: Event) -> Result<(), Box<dyn std::error::Error
     match event.kind {
         EventKind::Create(_) | EventKind::Modify(_) => {
             for path in event.paths {
-                if path.is_file() && path.extension().map_or(false, |ext| ext == "txt") {
+                // if path.is_file() && path.extension().map_or(false, |ext| ext == "txt") {
+                if path.is_file() && path.extension().is_some_and(|ext| ext == "txt") {
                     // Small delay to ensure file is fully written
                     tokio::time::sleep(Duration::from_millis(100)).await;
 

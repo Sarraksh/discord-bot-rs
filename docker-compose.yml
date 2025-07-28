@@ -76,6 +76,7 @@ services:
       - ./.config:/app/.config:rw
       - ./bin:/app/bin:ro
       - ./exchange:/app/exchange:rw
+      - ./kc:/app/kc:rw
     restart: unless-stopped
     networks:
       - bot-network
